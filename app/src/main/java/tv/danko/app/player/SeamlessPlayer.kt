@@ -235,12 +235,44 @@ class SeamlessPlayer(
      * MpvSurfaceView.surfaceChanged: formato "${w}x$h" como el oficial.
      */
     fun setSurfaceSize(w: Int, h: Int) {
+        surfaceW = w
+        surfaceH = h
         try {
             mpv.setPropertyString("android-surface-size", "${w}x$h")
         } catch (e: Exception) {
             Log.w(tag, "setSurfaceSize failed: $e")
         }
     }
+
+    /** Tamaño del surface (para el zoom fill) + aspect del video actual. */
+    var surfaceW = 0
+        private set
+    var surfaceH = 0
+        private set
+    private val _videoAspect = MutableStateFlow(16.0 / 9.0)
+    val videoAspect: StateFlow<Double> = _videoAspect
+
+    /** Zoom estilo VLC Fill (preserva aspect, recorta). 0 = ajustar. */
+    fun setZoomProp(zoom: Double) {
+        try {
+            mpv.setPropertyDouble("video-zoom", zoom.coerceIn(0.0, 2.0))
+        } catch (e: Exception) {
+            Log.w(tag, "setZoomProp failed: $e")
+        }
+    }
+
+    /** Pan mientras hay zoom (siempre en [-1, 1]). */
+    fun setPanProp(x: Double, y: Double) {
+        try {
+            mpv.setPropertyDouble("video-pan-x", SeamlessEngine.clampPan(x))
+            mpv.setPropertyDouble("video-pan-y", SeamlessEngine.clampPan(y))
+        } catch (e: Exception) {
+            Log.w(tag, "setPanProp failed: $e")
+        }
+    }
+
+    /** Vuelve a ajustar (zoom 0 + pan centrado). */
+    fun resetZoomGeometry() = setPanProp(0.0, 0.0).also { setZoomProp(0.0) }
 
     fun play(url: String, live: Boolean = true, userAgent: String? = null) {
         currentUrl = url
@@ -380,6 +412,7 @@ class SeamlessPlayer(
                 errRetries = 0
                 cascade = 0
                 _state.value = PlayerState.Playing
+                updateVideoAspect()
                 logStats()
                 startStatsTick() // telemetría permanente (barata, clave para diagnóstico remoto)
             }
@@ -402,6 +435,21 @@ class SeamlessPlayer(
         (map["file_error"] as? MPVNode.StringNode)?.value ?: ""
     } catch (_: Exception) {
         ""
+    }
+
+    /** Lee el aspect real del video (para el zoom fill). */
+    private fun updateVideoAspect() {
+        try {
+            val vp = (mpv.getPropertyNode("video-params") as? MPVNode.MapNode)?.value
+            val a = when (val n = vp?.get("aspect")) {
+                is MPVNode.DoubleNode -> n.value
+                is MPVNode.StringNode -> n.value.toDoubleOrNull()
+                is MPVNode.IntNode -> n.value.toDouble()
+                else -> null
+            }
+            if (a != null && a > 0) _videoAspect.value = a
+        } catch (_: Exception) {
+        }
     }
 
     // --- diagnóstico de calidad/rendimiento (una línea por canal + tick) ---

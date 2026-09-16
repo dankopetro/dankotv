@@ -46,4 +46,18 @@ object SeamlessEngine {
      */
     fun isFatalStreamError(fileError: String): Boolean =
         Regex("""HTTP error 4(01|03|04|10)\b""").containsMatchIn(fileError)
+
+    /**
+     * Zoom mpv (prop `video-zoom`, unidades lineales: 0 = 1:1) para LLENAR
+     * la pantalla recortando (estilo VLC "Fill", sin deformar). Solo tiene
+     * sentido si la pantalla es más ancha que el video.
+     */
+    fun fillZoomProp(screenAspect: Double, videoAspect: Double): Double {
+        if (videoAspect <= 0 || screenAspect <= 0) return 0.0
+        val factor = (screenAspect / videoAspect).coerceIn(1.0, 3.0)
+        return factor - 1.0
+    }
+
+    /** Pan mpv (`video-pan-x/y`) siempre en [-1, 1]. */
+    fun clampPan(v: Double): Double = v.coerceIn(-1.0, 1.0)
 }

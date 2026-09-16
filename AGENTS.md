@@ -566,7 +566,28 @@ decdrop/framedrop/cache/mistimed/vsyncr/tpos/speed/asr/aid) + LogObserver mpv.
 174MB e installs eternos; con 2 = ~91MB. OJO: filtrar solo arm64 ROMPE la TV
 32 bits — INSTALL_FAILED_NO_MATCHING_ABIS). TV con 4.2GB: se llena instalando;
 `pm trim-caches` + DB propia 101MB (Fenix muerta 344k + SuperXL 78k) — ofrecer
-borrar Fenix.
+borrar Fenix (HECHO 16/09: borradas Test y Fenix de ambos, TV 122MB→24MB).
+
+### 9.13 Zoom llenar + pellizco + cutout (teléfono, 16/09 — 0.1-f3.5)
+Pedido del usuario: pantalla completa en landscape aunque recorte (estilo VLC).
+- Props mpv `video-zoom` (lineal: 0 = 1:1, verificado empírico) + `video-pan-x/y`
+  ([-1,1]). Matemática pura en SeamlessEngine (`fillZoomProp`, `clampPan`) con
+  tests JVM. `videoAspect` (flow, de video-params) + tamaño surface (de
+  setSurfaceSize) en SeamlessPlayer; `setZoomProp/setPanProp/resetZoomGeometry`.
+- UI (PlayerScreen, SOLO landscape no-TV): botón ⤢/⊡ (Ajustar↔Llenar) en la
+  LazyRow + pellizco (`Modifier.transformable`, convive con tap: multi-touch no
+  es tap) con pan (arrastrar pantalla = un pantallazo). Reset a ajustar al
+  cambiar de canal u orientación. En TV se oculta (surface 16:9 + embed ignora
+  zoom); en portrait también (pedido del usuario). Pellizco VERIFICADO por el
+  usuario ("perfecto en la dimensión que quiera").
+- Cutout (franja de la cámara no llenaba): `SHORT_EDGES` en el window + OBLIGADO
+  `WindowCompat.setDecorFitsSystemWindows(false)` al entrar (restore true al
+  salir) — sin esto las vistas siguen insetadas y la franja muestra el
+  windowBackground #141414 (grisácea, confundible con barra de video). Título
+  con padding de `WindowInsets.displayCutout` solo en landscape (esquiva cámara).
+  Todo no-op en TV. Verificado por el usuario ("Golazo").
+- `WindowCompat.getDecorFitsSystemWindows` NO existe en nuestro androidx.core
+  (compilar falla): asumir default true con try/catch.
 
 ---
 

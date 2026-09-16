@@ -1,17 +1,27 @@
 package tv.danko.app.ui.player
 
 import android.app.Activity
+import android.app.UiModeManager
+import android.content.Context
+import android.content.res.Configuration
+import android.os.Build
+import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -29,22 +39,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import tv.danko.app.player.MpvSurfaceView
 import tv.danko.app.player.PlayerState
+import tv.danko.app.player.SeamlessEngine
 import tv.danko.app.player.SeamlessPlayer
 import tv.danko.app.ui.theme.DankoMuted
 import tv.danko.app.ui.theme.DankoOrange
@@ -81,6 +95,59 @@ fun PlayerScreen(
     var fav by remember { mutableStateOf(false) }
     var curTitle by remember { mutableStateOf(title) }
     var curUrl by remember { mutableStateOf(url) }
+    // Zoom estilo VLC (SOLO landscape no-TV, ver abajo): factor 1 = ajustar,
+    // >1 = llenar recortando. El pan va en unidades mpv [-1, 1].
+    var zoomFactor by remember { mutableStateOf(1f) }
+    var panX by remember { mutableStateOf(0.0) }
+    var panY by remember { mutableStateOf(0.0) }
+    val videoAspect by player.videoAspect.collectAsState()
+    val isLandscape =
+        LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isTv = remember {
+        try {
+            val um = ctx.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager
+            um?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
+        } catch (_: Exception) {
+            false
+        }
+    }
+    // En TV el surface ya es 16:9 (nada que llenar) y embed ignora zoom/pan.
+    // En portrait se ve bien (pedido del usuario): zoom solo en landscape.
+    val zoomable = isLandscape && !isTv
+
+    fun applyZoom(factor: Float, x: Double = panX, y: Double = panY) {
+        zoomFactor = factor.coerceIn(1f, 3f)
+        panX = SeamlessEngine.clampPan(x)
+        panY = SeamlessEngine.clampPan(y)
+        player.setZoomProp((zoomFactor - 1).toDouble())
+        player.setPanProp(panX, panY)
+    }
+
+    fun resetZoom() {
+        zoomFactor = 1f
+        panX = 0.0
+        panY = 0.0
+        player.resetZoomGeometry()
+    }
+
+    fun toggleFill() {
+        if (zoomFactor > 1f) {
+            resetZoom()
+        } else {
+            val sa = if (player.surfaceH > 0) {
+                player.surfaceW.toDouble() / player.surfaceH
+            } else {
+                16.0 / 9.0
+            }
+            val fill = SeamlessEngine.fillZoomProp(sa, videoAspect).toFloat()
+            applyZoom(1f + fill)
+        }
+    }
+
+    // Al cambiar de canal o de orientación, volver a ajustar (predecible).
+    LaunchedEffect(curUrl, isLandscape) {
+        resetZoom()
+    }
     val hasQueue = queue != null && !queue.isEmpty
     LaunchedEffect(queue) {
         if (queue != null && queue.current != null) {
@@ -120,18 +187,44 @@ fun PlayerScreen(
     // del sistema achican el surface (2300x954 en vez de 2400x1080) y el
     // video queda "cuadrado" con bandas gruesas. Se restaura al salir.
     // En TV es no-op (no hay barras). El botón ⛶ sigue manual.
+    // + Dibujo bajo el cutout (16/09, pedido del usuario): en landscape la
+    // franja de la cámara quedaba sin llenar. SHORT_EDGES extiende la
+    // ventana a los bordes cortos (donde está la cámara en landscape).
+    // La cámara tapa unos px de video (aceptado por el usuario).
+    // + decorFitsSystemWindows(false): sin esto las VISTAS siguen insetadas
+    // (la franja grisácea era el windowBackground #141414, no video).
     DisposableEffect(Unit) {
         val w = activity?.window
         val c = w?.let { WindowInsetsControllerCompat(it, it.decorView) }
+        var prevCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
         try {
             c?.systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             c?.hide(WindowInsetsCompat.Type.systemBars())
+            if (Build.VERSION.SDK_INT >= 28) {
+                w?.let {
+                    prevCutoutMode = it.attributes.layoutInDisplayCutoutMode
+                    it.attributes = it.attributes.apply {
+                        layoutInDisplayCutoutMode =
+                            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                    }
+                }
+            }
+            // Solo el player lo cambia en la app → el default (true) vale.
+            w?.let { WindowCompat.setDecorFitsSystemWindows(it, false) }
         } catch (_: Exception) {
         }
         onDispose {
             try {
                 c?.show(WindowInsetsCompat.Type.systemBars())
+                if (Build.VERSION.SDK_INT >= 28) {
+                    w?.let {
+                        it.attributes = it.attributes.apply {
+                            layoutInDisplayCutoutMode = prevCutoutMode
+                        }
+                    }
+                }
+                w?.let { WindowCompat.setDecorFitsSystemWindows(it, true) }
             } catch (_: Exception) {
             }
         }
@@ -174,11 +267,26 @@ fun PlayerScreen(
         is PlayerState.Dead -> "Canal caído (${s.reason}) — recargá la lista (⟳)"
     }
 
+    // Pellizco para zoom (VLC): convive con el tap (multi-touch no es tap).
+    // Arrastrar pantalla completa = un pantallazo de pan al zoom actual.
+    val transformState = rememberTransformableState { zoomChange, panChange, _ ->
+        if (!zoomable) return@rememberTransformableState
+        val nz = (zoomFactor * zoomChange).coerceIn(1f, 3f)
+        val sw = (player.surfaceW * nz).takeIf { it > 0 } ?: 1f
+        val sh = (player.surfaceH * nz).takeIf { it > 0 } ?: 1f
+        applyZoom(
+            nz,
+            panX + panChange.x / sw * 2,
+            panY + panChange.y / sh * 2,
+        )
+    }
+
     Box(
         Modifier
             .fillMaxSize()
             .background(Color.Black)
             .focusable()
+            .then(if (zoomable) Modifier.transformable(transformState) else Modifier)
             .clickable { controls = !controls }
             .onKeyEvent { ev ->
                 if (ev.type == KeyEventType.KeyDown && !controls &&
@@ -207,7 +315,15 @@ fun PlayerScreen(
                     "$curTitle  ·  $label",
                     color = if (state is PlayerState.Playing && isLive) DankoOrange else DankoMuted,
                     fontSize = 13.sp,
-                    modifier = Modifier.padding(12.dp),
+                    // En landscape el título esquiva la cámara (cutout lateral).
+                    modifier = Modifier.padding(12.dp)
+                        .then(
+                            if (isLandscape) {
+                                Modifier.windowInsetsPadding(WindowInsets.displayCutout)
+                            } else {
+                                Modifier
+                            },
+                        ),
                 )
                 Box(Modifier.weight(1f).fillMaxWidth())
                 Column(
@@ -251,6 +367,17 @@ fun PlayerScreen(
                                 onClick = { applyFullscreen(!fullscreen) },
                                 modifier = Modifier.tvFocusBorder(),
                             ) { Text("⛶") }
+                        }
+                        // Zoom llenar/ajustar (SOLO landscape no-TV): recorta
+                        // arriba/abajo sin deformar, estilo VLC. En TV no va
+                        // (surface 16:9 + embed ignora zoom).
+                        if (zoomable) {
+                            item {
+                                Button(
+                                    onClick = { toggleFill() },
+                                    modifier = Modifier.tvFocusBorder(),
+                                ) { Text(if (zoomFactor > 1f) "⊡" else "⤢") }
+                            }
                         }
                         if (hasQueue) {
                             item {

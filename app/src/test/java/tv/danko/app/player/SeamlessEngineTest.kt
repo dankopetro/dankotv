@@ -64,4 +64,21 @@ class SeamlessEngineTest {
         assertFalse(SeamlessEngine.isFatalStreamError("HTTP error 503 Service Unavailable"))
         assertFalse(SeamlessEngine.isFatalStreamError(""))
     }
+
+    @Test
+    fun zoomFillSoloCuandoPantallaMasAncha() {
+        // Teléfono 20:9 (2.222) vs video 16:9 (1.778): zoom 0.25 (recorta 20%).
+        assertEquals(0.25, SeamlessEngine.fillZoomProp(2.222, 1.778), 0.01)
+        // Misma proporción: sin zoom.
+        assertEquals(0.0, SeamlessEngine.fillZoomProp(1.778, 1.778), 0.0)
+        // Pantalla más angosta (portrait): sin zoom (no estirar).
+        assertEquals(0.0, SeamlessEngine.fillZoomProp(0.45, 1.778), 0.0)
+        // Clamp a 3x y entradas inválidas.
+        assertEquals(2.0, SeamlessEngine.fillZoomProp(4.0, 1.0), 0.0)
+        assertEquals(0.0, SeamlessEngine.fillZoomProp(2.0, 0.0), 0.0)
+        assertEquals(0.0, SeamlessEngine.fillZoomProp(0.0, 1.778), 0.0)
+        assertEquals(1.0, SeamlessEngine.clampPan(1.0), 0.0)
+        assertEquals(-1.0, SeamlessEngine.clampPan(-5.0), 0.0)
+        assertEquals(1.0, SeamlessEngine.clampPan(9.0), 0.0)
+    }
 }
