@@ -473,7 +473,13 @@ DOS cosas distintas superpuestas:
 - `input tap` NO llega a Compose en la TV TCL (los taps sintéticos no
   dispatchean); el D-pad SÍ (DPAD_CENTER sobre card navega). En el teléfono
   tap sí funciona.
-- `uiautomator dump` en la TV devuelve jerarquía VIEJA/stale (y a veces "null
+- **screencap en la TCL MIENTE a veces (16/09, lección del usuario):** puede devolver
+  frames NEGROS o viejos (app sana, tarjeta visible en el TV real, captura en negro).
+  REGLA: captura negra/vacía = reintentar 2-3 veces con segundos entre medio, NUNCA
+  asumir estado de la app por una sola captura. Prioridad de evidencia en la TV:
+  1) DB por run-as + logs (ground truth instantáneo), 2) screencap repetido,
+  3) preguntar al USUARIO que mira el TV (una pregunta ahorra 4 rondas adb).
+  uiautomator en la TV devuelve jerarquía VIEJA/stale (y a veces "null
   root node"). NO confiar en él para TV. Verificar por: screencap + tesseract
   (spa) [tesseract instalado en la laptop], pixel-diff PIL, o preguntar al
   usuario. En el teléfono uiautomator SÍ funciona.
