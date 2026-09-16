@@ -1,0 +1,21 @@
+#EXTM3U x-tvg-url="http://epg.example.com/xmltv.gz"
+#EXTINF:-1 tvg-id="BBCNews.uk" tvg-logo="http://logo.example.com/bbc.png" group-title="Noticias",BBC News
+http://srv.example.com:8080/live/u1/p1/101.ts
+#EXTINF:-1 tvg-id="" tvg-logo="" group-title="Noticias",CNN en Español, con coma
+http://srv.example.com:8080/live/u1/p1/102.ts
+#EXTINF:-1 group-title="Deportes",ESPN
+http://srv.example.com:8080/live/u1/p1/201.ts|User-Agent=CustomUA/1.0&Referer=http://x.example/
+#EXTINF:-1 tvg-logo="http://logo.example.com/fox.png" group-title="Deportes",Fox Sports
+http://srv.example.com:8080/live/u1/p1/202.ts
+#EXTINF:-1 tvg-name="HBO" tvg-id="HBO.us" group-title="Cine",HBO
+http://srv.example.com:8080/live/u1/p1/301.ts
+#EXTINF:-1 group-title="Cine",HBO
+http://srv.example.com:8080/live/u1/p1/302.ts
+#EXTINF:-1 group-title="Cine",Sin URL se salta
+#EXTINF:-1 ,Solo Titulo Sin Grupo
+http://srv.example.com:8080/live/u1/p1/401.ts
+#EXTGRP:Infantiles
+#EXTINF:-1 tvg-id="Toon.tv" group-title="Otro",Cartoon (override por EXTGRP)
+http://srv.example.com:8080/live/u1/p1/501.ts
+#EXTINF:-1 tvg-id="Musica.tv" group-title="Música",MTV Latinoamérica áéí
+http://srv.example.com:8080/live/u1/p1/601.ts

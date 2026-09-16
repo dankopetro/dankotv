@@ -1,0 +1,75 @@
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
+}
+
+android {
+    namespace 'tv.danko.app'
+    compileSdk {
+        version = release(37)
+    }
+
+    defaultConfig {
+        applicationId "tv.danko.app"
+        minSdk 26
+        targetSdk 36
+        versionCode 6
+        versionName "0.1-f3.4"
+        // TV = armeabi-v7a (32 bits! rtd284x con userspace de 32b) +
+        // teléfono = arm64-v8a. Sin x86 (emulador). El APK traía 4 ABIs
+        // (174MB, installs eternos); con 2 queda en ~95MB.
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
+    }
+    // Room: exporta esquemas (útil para migraciones F6+)
+    ksp {
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
+}
+
+dependencies {
+    implementation platform(libs.androidx.compose.bom)
+    implementation libs.androidx.compose.ui
+    implementation libs.androidx.compose.ui.tooling.preview
+    implementation libs.androidx.compose.material3
+    implementation libs.androidx.activity.compose
+    implementation libs.androidx.core.ktx
+    // TV (Leanback/D-pad): se usan desde F3, aquí solo se valida resolución
+    implementation libs.androidx.tv.foundation
+    implementation libs.androidx.tv.material
+    // F1 datos: red + base + settings + JSON (JVM-testeable, sin android.*)
+    implementation libs.okhttp
+    implementation libs.androidx.room.runtime
+    implementation libs.androidx.room.ktx
+    implementation libs.androidx.datastore.preferences
+    implementation libs.kotlinx.coroutines.android
+    implementation libs.gson
+    // F2 player: libmpv embebido (mismo motor que Linux)
+    implementation libs.mpv.android.lib
+    // F3 UI: navegación + ViewModels
+    implementation libs.androidx.navigation.compose
+    implementation libs.androidx.lifecycle.viewmodel.compose
+    implementation libs.androidx.lifecycle.runtime.compose
+    ksp libs.androidx.room.compiler
+    testImplementation libs.junit
+    testImplementation libs.mockwebserver3
+    testImplementation libs.kotlinx.coroutines.test
+}

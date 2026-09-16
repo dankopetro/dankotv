@@ -1,0 +1,13 @@
+{
+  "user_info": {
+    "username": "testuser",
+    "password": "testpass",
+    "auth": 1,
+    "status": "Active"
+  },
+  "server_info": {
+    "url": "srv.example.com",
+    "port": "8080",
+    "https_port": "8443"
+  }
+}
