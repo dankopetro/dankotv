@@ -33,6 +33,24 @@ object ShareUtils {
     }
 
     /**
+     * Log persistente del flujo REC (cacheDir/DankoTV/rec.log, máx 100KB).
+     * El logcat rota en minutos y los tests del usuario llegan tarde;
+     * este archivo se trae por adb cuando haga falta. Espeja a logcat.
+     */
+    fun recLog(ctx: Context, msg: String) {
+        try {
+            android.util.Log.i("DankoTV", msg)
+            val dir = File(ctx.cacheDir, "DankoTV")
+            if (!dir.exists()) dir.mkdirs()
+            val f = File(dir, "rec.log")
+            if (f.exists() && f.length() > 100 * 1024) f.delete()
+            val ts = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
+            f.appendText("$ts $msg\n")
+        } catch (_: Exception) {
+        }
+    }
+
+    /**
      * ¿El archivo tiene tracks A/V legibles? (validación barata post-dump).
      */
     fun hasAvTracks(f: File): Boolean {
@@ -71,7 +89,45 @@ object ShareUtils {
      * en el archivo y se inyectan; y se arranca a muxear desde el primer
      * keyframe de video.
      */
-    fun remuxTsToMp4(src: File, dst: File): Boolean {
+    fun remuxTsToMp4(
+        src: File,
+        dst: File,
+        trimToLastUs: Long = 0,
+        videoFps: Double = 30.0,
+        log: (String) -> Unit = {},
+    ): Boolean {
+        // Intento 1: completo. Si el stop() falla (timestamps del proveedor),
+        // intento 2: solo video (diagnostica + entrega algo útil igual).
+        try {
+            if (muxTracks(src, dst, withAudio = true, trimToLastUs, videoFps, log)) return true
+        } catch (e: Exception) {
+            log("remux full falló: $e")
+        }
+        try {
+            dst.delete()
+        } catch (_: Exception) {
+        }
+        log("remux: reintento solo-video")
+        return try {
+            muxTracks(src, dst, withAudio = false, trimToLastUs, videoFps, log)
+        } catch (e: Exception) {
+            log("remux video-only falló: $e")
+            try {
+                dst.delete()
+            } catch (_: Exception) {
+            }
+            false
+        }
+    }
+
+    private fun muxTracks(
+        src: File,
+        dst: File,
+        withAudio: Boolean,
+        trimToLastUs: Long = 0,
+        videoFps: Double = 30.0,
+        log: (String) -> Unit = {},
+    ): Boolean {
         var extractor: android.media.MediaExtractor? = null
         var muxer: android.media.MediaMuxer? = null
         try {
@@ -83,24 +139,73 @@ object ShareUtils {
             for (i in 0 until extractor.trackCount) {
                 val format = extractor.getTrackFormat(i)
                 val mime = format.getString(android.media.MediaFormat.KEY_MIME) ?: continue
-                if (mime.startsWith("video/") || mime.startsWith("audio/")) {
-                    tracks.add(Track(i, format, mime.startsWith("video/")))
+                val isVideo = mime.startsWith("video/")
+                if (isVideo || (withAudio && mime.startsWith("audio/"))) {
+                    tracks.add(Track(i, format, isVideo))
                 }
             }
-            android.util.Log.i("DankoTV", "remux: ${tracks.size} tracks en ${src.name}")
+            log("remux: ${tracks.size} tracks en ${src.name}")
             if (tracks.isEmpty()) {
-                android.util.Log.w("DankoTV", "remux: sin tracks A/V en ${src.name}")
+                log("remux: sin tracks A/V en ${src.name}")
                 return false
             }
+            tracks.filter { !it.isVideo }.forEach {
+                log("remux: audio mime=${it.format.getString(android.media.MediaFormat.KEY_MIME)} " +
+                        "csd=${it.format.containsKey("csd-0")}",
+                )
+            }
             val video = tracks.firstOrNull { it.isVideo }
-            if (video != null && !video.format.containsKey("csd-0")) {
+            // CSD: el del extractor viene malformado con estos streams (el
+            // muxer lo acepta en addTrack pero revienta en stop()). Se
+            // reconstruye SIEMPRE desde SPS/PPS escaneados (testeado en JVM).
+            if (video != null) {
                 val (sps, pps) = findSpsPps(src)
-                android.util.Log.i(
-                    "DankoTV",
-                    "remux: csd ausente, SPS=${sps?.size} PPS=${pps?.size}",
+                log(
+                    "remux: video mime=${video.format.getString(android.media.MediaFormat.KEY_MIME)} " +
+                        "csdOrig=${video.format.containsKey("csd-0")} " +
+                        "SPS=${sps?.size} PPS=${pps?.size}",
                 )
                 if (sps != null) video.format.setByteBuffer("csd-0", java.nio.ByteBuffer.wrap(sps))
                 if (pps != null) video.format.setByteBuffer("csd-1", java.nio.ByteBuffer.wrap(pps))
+            }
+            // Trim del pre-roll (el dump trae ~45s previos al REC) POR CONTEO:
+            // los PTS son basura (seekTo no se mueve, en silencio), así que
+            // se cuenta (sin decode) y se avanza por cantidad. Inmune a PTS.
+            val fpsTrim = videoFps.coerceIn(1.0, 120.0)
+            var skipV = 0L
+            var skipA = 0L
+            if (trimToLastUs > 0) {
+                var cnt: android.media.MediaExtractor? = null
+                try {
+                    cnt = android.media.MediaExtractor()
+                    cnt.setDataSource(src.absolutePath)
+                    for (t in tracks) cnt.selectTrack(t.srcIdx)
+                    var vc = 0L
+                    var ac = 0L
+                    while (true) {
+                        val idx = cnt.sampleTrackIndex
+                        if (idx < 0) break
+                        if (tracks.firstOrNull { it.srcIdx == idx }?.isVideo == true) vc++ else ac++
+                        cnt.advance()
+                    }
+                    val fileUs = if (vc > 0) vc * 1_000_000L / fpsTrim.toLong() else 0L
+                    val skipUs = fileUs - trimToLastUs
+                    log("remux: conteo v=$vc a=$ac (~${fileUs / 1_000_000}s), recorte ${(skipUs / 1_000_000)}s")
+                    if (skipUs > 1_000_000 && vc > 0) {
+                        skipV = skipUs * fpsTrim.toLong() / 1_000_000L
+                        skipA = if (ac > 0) skipV * ac / vc else 0L
+                        log("remux: salta $skipV video + $skipA audio")
+                    }
+                } catch (e: Exception) {
+                    log("remux: conteo falló ($e), va completo")
+                    skipV = 0
+                    skipA = 0
+                } finally {
+                    try {
+                        cnt?.release()
+                    } catch (_: Exception) {
+                    }
+                }
             }
             muxer = android.media.MediaMuxer(
                 dst.absolutePath,
@@ -111,22 +216,106 @@ object ShareUtils {
                 extractor.selectTrack(t.srcIdx)
                 trackMap[t.srcIdx] = muxer.addTrack(t.format)
             }
-            // Arrancar en keyframe de video (el corte es mid-GOP).
-            var skips = 0
-            while (skips < 2000) {
-                val idx = extractor.sampleTrackIndex
-                if (idx < 0) break
-                val isVid = tracks.firstOrNull { it.srcIdx == idx }?.isVideo ?: false
-                if (!isVid) break // audio inicial OK
-                if (extractor.sampleFlags and android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME != 0) break
-                extractor.advance()
-                skips += 1
+            // Saltar pre-roll por conteo (cuotas por track; vencen casi a la
+            // vez porque van proporcionales; el resto sub-frame es nada).
+            val wantTrim = skipV > 0 || skipA > 0
+            if (wantTrim) {
+                log("remux: salta $skipV video + $skipA audio")
+                var sv = skipV
+                var sa = skipA
+                while (sv > 0 || sa > 0) {
+                    val idx = extractor.sampleTrackIndex
+                    if (idx < 0) break
+                    if (tracks.firstOrNull { it.srcIdx == idx }?.isVideo == true) {
+                        if (sv > 0) {
+                            sv--
+                            extractor.advance()
+                        } else {
+                            break
+                        }
+                    } else {
+                        if (sa > 0) {
+                            sa--
+                            extractor.advance()
+                        } else {
+                            break
+                        }
+                    }
+                }
+            }
+            // Arrancar en keyframe de video SOLO si no hubo trim (con trim se
+            // arranca exacto y se aceptan artefactos iniciales breves; sin
+            // trim se busca arranque limpio). Audio alineado abajo en ambos.
+            var vStartPts = 0L
+            run {
+                if (!wantTrim) {
+                    var skips = 0
+                    while (skips < 2000) {
+                        val idx = extractor.sampleTrackIndex
+                        if (idx < 0) break
+                        val isVid = tracks.firstOrNull { it.srcIdx == idx }?.isVideo ?: false
+                        if (!isVid) break // audio inicial OK
+                        if (extractor.sampleFlags and android.media.MediaCodec.BUFFER_FLAG_KEY_FRAME != 0) break
+                        extractor.advance()
+                        skips += 1
+                    }
+                }
+                // El primer video a escribir define el cero de video.
+                var guard = 0
+                while (guard < 2000) {
+                    val idx = extractor.sampleTrackIndex
+                    if (idx < 0) break
+                    val isVid = tracks.firstOrNull { it.srcIdx == idx }?.isVideo ?: false
+                    if (isVid) {
+                        vStartPts = extractor.sampleTime
+                        break
+                    }
+                    extractor.advance()
+                    guard += 1
+                }
+                // Alinear audio: avanzar hasta su pts >= inicio de video.
+                guard = 0
+                while (guard < 2000) {
+                    val idx = extractor.sampleTrackIndex
+                    if (idx < 0) break
+                    val isVid = tracks.firstOrNull { it.srcIdx == idx }?.isVideo ?: false
+                    if (!isVid && extractor.sampleTime >= vStartPts) break
+                    if (isVid) break // video ya alineado
+                    extractor.advance()
+                    guard += 1
+                }
             }
             muxer.start()
-            val buf = java.nio.ByteBuffer.allocate(512 * 1024)
+            // 4MB: los IDR 1080p superan 512KB; con buffer chico readSampleData
+            // falla, el loop aborta y queda solo audio (16/09).
+            val buf = java.nio.ByteBuffer.allocate(4 * 1024 * 1024)
             val info = android.media.MediaCodec.BufferInfo()
             var samples = 0
             var first = ""
+            // Timestamps SINTETIZADOS por conteo (inmunes a PTS basura): video
+            // a fps nominal, audio a 1024 samples/frame. Duración exacta por
+            // construcción y stop() del muxer sin sorpresas.
+            val fps = videoFps.coerceIn(1.0, 120.0)
+            val aRate = try {
+                tracks.firstOrNull { !it.isVideo }
+                    ?.format?.getInteger(android.media.MediaFormat.KEY_SAMPLE_RATE) ?: 48000
+            } catch (_: Exception) {
+                48000
+            }.coerceIn(8000, 192000)
+            log("remux: synth fps=$fps aRate=$aRate")
+            var vCount = 0L
+            var aCount = 0L
+            var vSeq = 0L
+            val reorder = PtsReorder(16)
+            fun writeVideo(idx: Int, b: ByteArray, size: Int, flags: Int) {
+                info.offset = 0
+                info.size = size
+                info.presentationTimeUs = vCount * 1_000_000L / fps.toLong()
+                info.flags = flags
+                vCount += 1
+                muxer.writeSampleData(trackMap[idx] ?: return, java.nio.ByteBuffer.wrap(b, 0, size), info)
+            }
+            val videoIdx = tracks.firstOrNull { it.isVideo }?.srcIdx ?: -1
             try {
                 while (true) {
                     val track = extractor.sampleTrackIndex
@@ -134,28 +323,36 @@ object ShareUtils {
                     info.offset = 0
                     info.size = extractor.readSampleData(buf, 0)
                     if (info.size < 0) break
-                    info.presentationTimeUs = extractor.sampleTime
-                    info.flags = extractor.sampleFlags
+                    val isVid = track == videoIdx
+                    val flags = extractor.sampleFlags
                     if (samples == 0) {
-                        first = "track=$track size=${info.size} flags=${info.flags} pts=${info.presentationTimeUs}"
+                        first = "track=$track size=${info.size} flags=$flags"
                     }
-                    muxer.writeSampleData(trackMap[track] ?: break, buf, info)
+                    if (isVid) {
+                        // Copia propia: el reorder retiene (el buf se reusa).
+                        val bytes = buf.array().copyOf(info.size)
+                        val ready = reorder.push(vSeq++, extractor.sampleTime, bytes, info.size, flags)
+                        if (ready != null) writeVideo(track, ready.bytes, ready.size, ready.flags)
+                    } else {
+                        info.presentationTimeUs = aCount * 1024L * 1_000_000L / aRate
+                        aCount += 1
+                        muxer.writeSampleData(trackMap[track] ?: break, buf, info)
+                    }
                     extractor.advance()
                     samples += 1
                 }
+                // Drenar reorder en orden de presentación.
+                for (it in reorder.drain()) writeVideo(videoIdx, it.bytes, it.size, it.flags)
             } catch (e: Exception) {
-                android.util.Log.w("DankoTV", "remux: write falló en sample $samples: $e")
+                log("remux: write falló en sample $samples: $e")
                 throw e
             }
-            android.util.Log.i("DankoTV", "remux: pre-stop samples=$samples first=[$first]")
+            log("remux: pre-stop samples=$samples first=[$first]")
             muxer.stop()
-            android.util.Log.i(
-                "DankoTV",
-                "remux: tracks=${trackMap.size} samples=$samples out=${dst.length()}",
-            )
+            log("remux: tracks=${trackMap.size} samples=$samples out=${dst.length()} vDur=${vCount * 1_000_000L / fps.toLong()}us")
             return dst.exists() && dst.length() > 0
         } catch (e: Exception) {
-            android.util.Log.w("DankoTV", "remux falló: $e")
+            log("remux falló: $e")
             try {
                 dst.delete()
             } catch (_: Exception) {
@@ -174,9 +371,40 @@ object ShareUtils {
     }
 
     /**
-     * Busca NAL SPS (7) y PPS (8) Annex-B (00 00 01 67/68) en el archivo.
-     * Devuelve los NAL SIN start code (como los quiere csd-0/csd-1).
+     * Reordena presentación por PTS crudos. El extractor entrega en DECODE
+     * order (con B-frames ≠ presentation order); sellar secuencial directo
+     * rompe la cadencia (duración exacta pero movimiento desparejo/lento).
+     * Buffer de lookahead K: junta, ordena por pts crudos (estable), suelta
+     * el menor. Solo video (el audio siempre viene ordenado). Testeable JVM.
      */
+    class PtsReorder(private val depth: Int = 16) {
+        data class Item(
+            val seq: Long,
+            val pts: Long,
+            val bytes: ByteArray,
+            val size: Int,
+            val flags: Int,
+        )
+
+        private val buf = ArrayDeque<Item>()
+
+        /** Mete un sample; devuelve el menor listo (o null si junta). */
+        fun push(seq: Long, pts: Long, bytes: ByteArray, size: Int, flags: Int): Item? {
+            buf.addLast(Item(seq, pts, bytes, size, flags))
+            if (buf.size <= depth) return null
+            val m = buf.minWithOrNull(compareBy({ it.pts }, { it.seq }))!!
+            buf.remove(m)
+            return m
+        }
+
+        /** Vacía ordenado por pts (estable). */
+        fun drain(): List<Item> {
+            val r = buf.sortedWith(compareBy({ it.pts }, { it.seq }))
+            buf.clear()
+            return r
+        }
+    }
+    /** Busca NAL SPS (7) y PPS (8) Annex-B. Sin start code (para csd). */
     fun findSpsPps(src: File): Pair<ByteArray?, ByteArray?> {
         try {
             val d = src.readBytes()

@@ -589,6 +589,41 @@ Pedido del usuario: pantalla completa en landscape aunque recorte (estilo VLC).
 - `WindowCompat.getDecorFitsSystemWindows` NO existe en nuestro androidx.core
   (compilar falla): asumir default true con try/catch.
 
+### 9.14 F4-rec: grabar + foto + compartir (solo teléfono, 16/09 — 0.1-f4)
+Pedido: grabar lo que se ve y compartirlo en el momento (WhatsApp/IG). SOLO
+teléfono (TV intacta: botones ocultos con isTv).
+- Flujo: dump-cache continuo de mpv → .ts temporal → remux MediaMuxer → .mp4 →
+  MediaStore (Movies/DankoTV) → ACTION_SEND automático. Foto: screenshot-to-file
+  → Pictures/DankoTV → share. Botones ⏺/📷 en la LazyRow + timer REC + punto
+  ROJO DIBUJADO (Box CircleShape; el glifo ⏺ U+23FA lo dibuja la fuente EMOJI
+  en blanco e IGNORA el color del Text — trampa real, horas perdidas).
+- stream-record PIERDE ~97% de paquetes en este build (0.5MB de 19MB): NO usar;
+  dump-cache trae TODO (pero también ~45s previos: ver trim).
+- mpv-mux directo a .mp4 escribe HEADERS ROTOS (tkhd 1280x1080, mdhd timescale
+  1438908416 → duración 0.0s): WhatsApp tarda y muestra 5s. NO usar como salida.
+- MediaMuxer + timestamps del proveedor = stop() revienta ("would have stopped
+  already") aun con miles de writes OK. Causas halladas: (1) csd del extractor
+  malformado → reconstruir SIEMPRE desde SPS/PPS escaneados (findSpsPps, test
+  JVM); (2) buffer 512KB < IDR 1080p → loop abortaba dejando solo audio →
+  4MB; (3) PTS basura → re-sellar (ver abajo).
+- Timestamps: SINTETIZAR por conteo (video n/fps con videoFps=container-fps,
+  audio n×1024/rate) + reorder PtsReorder (lookahead 16) porque el extractor
+  da DECODE order y sellar secuencial rompe cadencia B-frames (duración exacta
+  pero movimiento desparejo). NO usar PTS crudos ni siquiera rebaseados.
+- Trim pre-roll por CONTEO (cuotas v/a proporcionales): seekTo NO se mueve con
+  estos PTS (en silencio). fileUs=Vc/fps; skip; sin seeks en ningún lado.
+- RecSpanMs (pared press→stop) y rec.log PERSISTENTE en cacheDir (el logcat rota
+  en minutos y los tests del usuario llegan tarde — lección de método).
+- Proceso anti-fantasmas (los installs mienten): versionCode por iteración +
+  `clean` antes de build candidato + verificar vc en device + force-stop +
+  proceso muerto, ANTES de pedir test al usuario. Sin esto se testea build viejo
+  (pasó 3 veces: botón rojo, trim ausente, remux viejo).
+- Negro al volver de background (audio sigue): surface destruido, VO no retoma
+  → reload del canal en ON_RESUME (solo si estaba Playing/Reloading).
+- time-pos MIENTE con embed (1.19-1.43x): velocidad se valida con SF --latency
+  (presents a 60Hz) + ausencia de warnings desync + ojo del usuario.
+- Limpieza galería del usuario: borrar solo archivos de prueba propios con su
+  OK (se acumulan .ts/mp4 DankoTV_* de los tests).
 ---
 
 ## 10. Proyecto viejo `/home/claudio/AndroidStudioProjects/DankoIPTV` (com.danko.iptv)

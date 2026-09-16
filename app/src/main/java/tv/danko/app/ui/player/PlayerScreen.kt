@@ -51,6 +51,7 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -186,6 +187,27 @@ fun PlayerScreen(
         }
     }
 
+    // Al volver de background el surface se destruyó y el VO puede quedar
+    // negro (el audio sigue). Recarga determinista del canal actual
+    // (en live reengancha el borde en ~2s). Solo tras haber ido a fondo.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var wentBackground by remember { mutableStateOf(false) }
+    DisposableEffect(lifecycleOwner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, ev ->
+            if (ev == androidx.lifecycle.Lifecycle.Event.ON_PAUSE) {
+                wentBackground = true
+            } else if (ev == androidx.lifecycle.Lifecycle.Event.ON_RESUME && wentBackground) {
+                wentBackground = false
+                val s = player.state.value
+                if (s is PlayerState.Playing || s is PlayerState.Reloading) {
+                    player.play(curUrl, isLive, userAgent)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+
     // Inmersivo al entrar al player (teléfono 14/09): sin esto las barras
     // del sistema achican el surface (2300x954 en vez de 2400x1080) y el
     // video queda "cuadrado" con bandas gruesas. Se restaura al salir.
@@ -278,35 +300,50 @@ fun PlayerScreen(
 
     fun fmtRec(s: Int) = "%02d:%02d".format(s / 60, s % 60)
 
-    /** Detiene, guarda en galería (.mp4) y abre compartir. */
+    /** Detiene, remuxea a .mp4 válido, guarda en galería y abre compartir. */
     fun stopRecAndShare() {
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val files = player.stopRecording()
-            android.util.Log.i("DankoTV", "REC flow: ${files.size} segmentos")
+            ShareUtils.recLog(ctx, "REC flow: ${files.size} segmentos")
             val uris = files.mapNotNull { f ->
                 try {
                     val src = java.io.File(f)
-                    android.util.Log.i(
-                        "DankoTV",
-                        "REC flow: seg ${src.name} size=${src.length()}",
-                    )
+                    ShareUtils.recLog(ctx, "REC flow: seg ${src.name} size=${src.length()}")
                     if (!src.exists() || src.length() == 0L) {
                         src.delete()
-                        android.util.Log.w("DankoTV", "REC flow: segmento vacío, descartado")
+                        ShareUtils.recLog(ctx, "REC flow: segmento vacío, descartado")
                         return@mapNotNull null
                     }
-                    // Se graba .mp4 directo (el remux .ts falla con estos PTS).
-                    // Validar que tenga tracks legibles antes de compartir.
-                    if (!ShareUtils.hasAvTracks(src)) {
-                        android.util.Log.w("DankoTV", "REC flow: sin tracks, se conserva ${src.name}")
+                    // .ts del dump → .mp4 con timestamps re-sellados desde 0
+                    // (los PTS del proveedor traen escalas basura que rompen
+                    // el stop() del muxer y confunden a WhatsApp).
+                    // Trim al span real (un solo segmento): el dump trae
+                    // ~45s previos al REC que confunden (59s por 10s).
+                    val spanUs = if (files.size == 1) {
+                        player.recSpanMs * 1000
+                    } else {
+                        0L
+                    }
+                    val mp4 = java.io.File(src.parent, src.nameWithoutExtension + ".mp4")
+                    val ok = ShareUtils.remuxTsToMp4(src, mp4, spanUs, player.videoFps) {
+                        ShareUtils.recLog(ctx, it)
+                    }
+                    ShareUtils.recLog(ctx, "REC flow: remux ok=$ok mp4=${mp4.length()}")
+                    src.delete()
+                    if (!ok || !ShareUtils.hasAvTracks(mp4)) {
+                        ShareUtils.recLog(ctx, "REC flow: remux inválido, se descarta")
+                        try {
+                            mp4.delete()
+                        } catch (_: Exception) {
+                        }
                         return@mapNotNull null
                     }
-                    val uri = ShareUtils.saveToGallery(ctx, src, src.name, "video")
-                    android.util.Log.i("DankoTV", "REC flow: gallery uri=$uri")
-                    if (uri != null) src.delete()
+                    val uri = ShareUtils.saveToGallery(ctx, mp4, mp4.name, "video")
+                    ShareUtils.recLog(ctx, "REC flow: gallery uri=$uri")
+                    mp4.delete()
                     uri
                 } catch (e: Exception) {
-                    android.util.Log.w("DankoTV", "REC flow: excepción $e")
+                    ShareUtils.recLog(ctx, "REC flow: excepción $e")
                     null
                 }
             }
@@ -320,7 +357,7 @@ fun PlayerScreen(
                         ShareUtils.shareUris(ctx, uris, video = true)
                     }
                 } catch (e: Exception) {
-                    android.util.Log.w("DankoTV", "REC flow: share falló $e")
+                    ShareUtils.recLog(ctx, "REC flow: share falló $e")
                 }
             }
         }

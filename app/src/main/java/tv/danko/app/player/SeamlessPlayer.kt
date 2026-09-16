@@ -17,6 +17,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import tv.danko.app.ui.player.ShareUtils
 
 /** IDs estables del ABI libmpv (client.h): no cambian entre versiones. */
 private const val MPV_EVENT_END_FILE = 7
@@ -72,7 +73,7 @@ sealed interface PlayerState {
  * reenvía al hilo principal (la lección del cartel de Linux, aplicada acá).
  */
 class SeamlessPlayer(
-    appContext: Context,
+    private val appContext: Context,
     private val cacheSecs: Int = 45,
     private val main: Handler = Handler(Looper.getMainLooper()),
     private val clock: () -> Long = { SystemClock.elapsedRealtime() },
@@ -260,6 +261,16 @@ class SeamlessPlayer(
     private val _videoAspect = MutableStateFlow(16.0 / 9.0)
     val videoAspect: StateFlow<Double> = _videoAspect
 
+    /** Dimensiones reales del video (para parchar headers mp4). */
+    var videoW = 0
+        private set
+    var videoH = 0
+        private set
+
+    /** fps nominal del stream (para sintetizar timestamps; default 30). */
+    var videoFps = 30.0
+        private set
+
     /** Zoom estilo VLC Fill (preserva aspect, recorta). 0 = ajustar. */
     fun setZoomProp(zoom: Double) {
         try {
@@ -370,6 +381,11 @@ class SeamlessPlayer(
     private var recSeg = 0
     private val recFiles = mutableListOf<String>()
 
+    /** Pared press→stop de la grabación (para recortar el pre-roll). */
+    var recSpanMs = 0L
+        private set
+    private var recStartWallMs = 0L
+
     /**
      * Empieza a grabar el stream tal cual llega (sin re-encode) a dir/base_p0.mp4.
      * Usa dump-cache CONTINUO (start=tpos actual): stream-record pierde ~97% de
@@ -397,7 +413,9 @@ class SeamlessPlayer(
             recBase = base
             recSeg = 0
             recFiles.clear()
-            val path = java.io.File(dir, "${base}_p0.mp4").absolutePath
+            recStartWallMs = System.currentTimeMillis()
+            recSpanMs = 0L
+            val path = java.io.File(dir, "${base}_p0.ts").absolutePath
             val tpos = try {
                 mpv.getPropertyDouble("time-pos") ?: 0.0
             } catch (_: Exception) {
@@ -413,7 +431,7 @@ class SeamlessPlayer(
             }
             recFiles.add(path)
             _recording.value = true
-            Log.i(tag, "REC start $path from tpos=$start")
+            ShareUtils.recLog(appContext, "REC start $path tpos=$start")
             return path
         } catch (e: Exception) {
             Log.w(tag, "REC start failed: $e")
@@ -424,6 +442,7 @@ class SeamlessPlayer(
     /** Detiene la grabación y devuelve los archivos (segmentos si hubo reloads). */
     fun stopRecording(): List<String> {
         if (!_recording.value) return recFiles.toList()
+        recSpanMs = System.currentTimeMillis() - recStartWallMs
         try {
             // Filename vacío = detener dump en curso (documentado).
             mpv.command("dump-cache", "0", "no", "")
@@ -444,6 +463,7 @@ class SeamlessPlayer(
             }
         } catch (_: Exception) {
         }
+        ShareUtils.recLog(appContext, "REC stop segs=${recFiles.size} spanMs=$recSpanMs")
         Log.i(tag, "REC stop (${recFiles.size} segs)")
         return recFiles.toList()
     }
@@ -459,7 +479,7 @@ class SeamlessPlayer(
             }
             recSeg += 1
             val dir = java.io.File(recFiles.last()).parentFile ?: return
-            val path = java.io.File(dir, "${recBase}_p$recSeg.mp4").absolutePath
+            val path = java.io.File(dir, "${recBase}_p$recSeg.ts").absolutePath
             val tpos = try {
                 mpv.getPropertyDouble("time-pos") ?: 0.0
             } catch (_: Exception) {
@@ -594,6 +614,17 @@ class SeamlessPlayer(
                 else -> null
             }
             if (a != null && a > 0) _videoAspect.value = a
+            val w = (vp?.get("w") as? MPVNode.IntNode)?.value?.toInt() ?: 0
+            val h = (vp?.get("h") as? MPVNode.IntNode)?.value?.toInt() ?: 0
+            if (w > 0 && h > 0) {
+                videoW = w
+                videoH = h
+            }
+            try {
+                val fps = mpv.getPropertyDouble("container-fps") ?: 0.0
+                if (fps > 0) videoFps = fps
+            } catch (_: Exception) {
+            }
         } catch (_: Exception) {
         }
     }
