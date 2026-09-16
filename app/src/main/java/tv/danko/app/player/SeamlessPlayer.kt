@@ -10,8 +10,13 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import `is`.xyz.mpv.MPV
 import `is`.xyz.mpv.MPVNode
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 /** IDs estables del ABI libmpv (client.h): no cambian entre versiones. */
 private const val MPV_EVENT_END_FILE = 7
@@ -90,6 +95,9 @@ class SeamlessPlayer(
 
     private val _state = MutableStateFlow<PlayerState>(PlayerState.Idle)
     val state: StateFlow<PlayerState> = _state
+
+    /** Hilos IO del player (dump-cache bloqueante, etc). Se cancela en destroy(). */
+    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private val observer = object : MPV.EventObserver {
         override fun eventProperty(name: String) {
@@ -318,6 +326,11 @@ class SeamlessPlayer(
         pendingLoad = false
         main.removeCallbacksAndMessages(null)
         try {
+            mpv.command("dump-cache", "0", "no", "") // por si grababa
+        } catch (_: Exception) {
+        }
+        _recording.value = false
+        try {
             mpv.setOptionString("keep-open", "no")
         } catch (_: Exception) {
         }
@@ -349,6 +362,133 @@ class SeamlessPlayer(
         }
     }
 
+    // --- F4-rec: grabación del stream + captura (solo teléfono en UI) ---
+
+    private val _recording = MutableStateFlow(false)
+    val recording: StateFlow<Boolean> = _recording
+    private var recBase = ""
+    private var recSeg = 0
+    private val recFiles = mutableListOf<String>()
+
+    /**
+     * Empieza a grabar el stream tal cual llega (sin re-encode) a dir/base_p0.mp4.
+     * Usa dump-cache CONTINUO (start=tpos actual): stream-record pierde ~97% de
+     * paquetes en este build (verificado 16/09). Se graba .mp4 DIRECTO porque
+     * el remux .ts→.mp4 con MediaMuxer falla con estos timestamps ("muxer would
+     * have stopped already" aun con 3603 samples OK). El comando dump-cache
+     * BLOQUEA hasta que se detiene → corre en hilo IO propio.
+     * Devuelve la ruta o null si mpv no pudo.
+     */
+    fun startRecording(dir: java.io.File, base: String): String? {
+        try {
+            if (!dir.exists()) dir.mkdirs()
+            // Limpieza de temporales viejos (una semana).
+            try {
+                val weekAgo = System.currentTimeMillis() - 7L * 24 * 3600 * 1000
+                dir.listFiles()?.forEach {
+                    if ((it.name.startsWith("rec_") || it.name.startsWith("DankoTV_")) &&
+                        it.lastModified() < weekAgo
+                    ) {
+                        it.delete()
+                    }
+                }
+            } catch (_: Exception) {
+            }
+            recBase = base
+            recSeg = 0
+            recFiles.clear()
+            val path = java.io.File(dir, "${base}_p0.mp4").absolutePath
+            val tpos = try {
+                mpv.getPropertyDouble("time-pos") ?: 0.0
+            } catch (_: Exception) {
+                0.0
+            }
+            val start = maxOf(0.0, tpos).toString()
+            ioScope.launch {
+                try {
+                    mpv.command("dump-cache", start, "no", path)
+                } catch (e: Exception) {
+                    Log.w(tag, "REC dump failed: $e")
+                }
+            }
+            recFiles.add(path)
+            _recording.value = true
+            Log.i(tag, "REC start $path from tpos=$start")
+            return path
+        } catch (e: Exception) {
+            Log.w(tag, "REC start failed: $e")
+            return null
+        }
+    }
+
+    /** Detiene la grabación y devuelve los archivos (segmentos si hubo reloads). */
+    fun stopRecording(): List<String> {
+        if (!_recording.value) return recFiles.toList()
+        try {
+            // Filename vacío = detener dump en curso (documentado).
+            mpv.command("dump-cache", "0", "no", "")
+        } catch (e: Exception) {
+            Log.w(tag, "REC stop failed: $e")
+        }
+        _recording.value = false
+        // Esperar flush: el archivo deja de crecer.
+        try {
+            var last = -1L
+            repeat(6) {
+                Thread.sleep(500)
+                val sz = recFiles.mapNotNull {
+                    java.io.File(it).takeIf { f -> f.exists() }?.length()
+                }.sum()
+                if (sz == last && sz >= 0) return@repeat
+                last = sz
+            }
+        } catch (_: Exception) {
+        }
+        Log.i(tag, "REC stop (${recFiles.size} segs)")
+        return recFiles.toList()
+    }
+
+    /** Nuevo segmento (misma grabación) tras un reload seamless. */
+    private fun rollRecording() {
+        if (!_recording.value || recBase.isEmpty()) return
+        try {
+            // Cerrar dump actual y abrir otro en el segmento nuevo.
+            try {
+                mpv.command("dump-cache", "0", "no", "")
+            } catch (_: Exception) {
+            }
+            recSeg += 1
+            val dir = java.io.File(recFiles.last()).parentFile ?: return
+            val path = java.io.File(dir, "${recBase}_p$recSeg.mp4").absolutePath
+            val tpos = try {
+                mpv.getPropertyDouble("time-pos") ?: 0.0
+            } catch (_: Exception) {
+                0.0
+            }
+            val start = maxOf(0.0, tpos).toString()
+            ioScope.launch {
+                try {
+                    mpv.command("dump-cache", start, "no", path)
+                } catch (e: Exception) {
+                    Log.w(tag, "REC roll dump failed: $e")
+                }
+            }
+            recFiles.add(path)
+            Log.i(tag, "REC roll $path")
+        } catch (e: Exception) {
+            Log.w(tag, "REC roll failed: $e")
+        }
+    }
+
+    /** Foto del frame actual a path (jpg). */
+    fun screenshot(path: String): Boolean = try {
+        mpv.command("screenshot-to-file", path)
+        java.io.File(path).exists()
+    } catch (e: Exception) {
+        Log.w(tag, "screenshot failed: $e")
+        false
+    }
+
     fun toggleMute(): Boolean {
         val m = try {
             !(mpv.getPropertyBoolean("mute") ?: false)
@@ -363,6 +503,10 @@ class SeamlessPlayer(
     }
 
     fun destroy() {
+        try {
+            ioScope.cancel()
+        } catch (_: Exception) {
+        }
         try {
             detachSurface()
         } catch (_: Exception) {
@@ -396,6 +540,8 @@ class SeamlessPlayer(
                 reloading = false
                 if (armed && currentUrl.isNotEmpty()) {
                     try {
+                        // Grabar seguía: nuevo segmento (el replace corta el anterior).
+                        rollRecording()
                         if (surfaceAttached) doLoad() else pendingLoad = true
                     } catch (e: Exception) {
                         Log.w(tag, "seamless reload failed: $e")
@@ -547,6 +693,7 @@ class SeamlessPlayer(
         main.postDelayed({
             if (armed && currentUrl.isNotEmpty()) {
                 try {
+                    rollRecording()
                     if (surfaceAttached) doLoad() else pendingLoad = true
                 } catch (e: Exception) {
                     Log.w(tag, "error retry failed: $e")

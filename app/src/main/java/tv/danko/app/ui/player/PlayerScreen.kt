@@ -21,7 +21,10 @@ import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -258,6 +261,114 @@ fun PlayerScreen(
         fav = queue.toggleFavorite(curUrl)
     }
 
+    // --- F4-rec (solo teléfono): grabar + foto + compartir ---
+    val recording by player.recording.collectAsState()
+    var recSecs by remember { mutableStateOf(0) }
+    LaunchedEffect(recording) {
+        if (recording) {
+            val t0 = System.currentTimeMillis()
+            while (true) {
+                kotlinx.coroutines.delay(1000)
+                recSecs = ((System.currentTimeMillis() - t0) / 1000).toInt()
+            }
+        } else {
+            recSecs = 0
+        }
+    }
+
+    fun fmtRec(s: Int) = "%02d:%02d".format(s / 60, s % 60)
+
+    /** Detiene, guarda en galería (.mp4) y abre compartir. */
+    fun stopRecAndShare() {
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val files = player.stopRecording()
+            android.util.Log.i("DankoTV", "REC flow: ${files.size} segmentos")
+            val uris = files.mapNotNull { f ->
+                try {
+                    val src = java.io.File(f)
+                    android.util.Log.i(
+                        "DankoTV",
+                        "REC flow: seg ${src.name} size=${src.length()}",
+                    )
+                    if (!src.exists() || src.length() == 0L) {
+                        src.delete()
+                        android.util.Log.w("DankoTV", "REC flow: segmento vacío, descartado")
+                        return@mapNotNull null
+                    }
+                    // Se graba .mp4 directo (el remux .ts falla con estos PTS).
+                    // Validar que tenga tracks legibles antes de compartir.
+                    if (!ShareUtils.hasAvTracks(src)) {
+                        android.util.Log.w("DankoTV", "REC flow: sin tracks, se conserva ${src.name}")
+                        return@mapNotNull null
+                    }
+                    val uri = ShareUtils.saveToGallery(ctx, src, src.name, "video")
+                    android.util.Log.i("DankoTV", "REC flow: gallery uri=$uri")
+                    if (uri != null) src.delete()
+                    uri
+                } catch (e: Exception) {
+                    android.util.Log.w("DankoTV", "REC flow: excepción $e")
+                    null
+                }
+            }
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                try {
+                    if (uris.isEmpty()) {
+                        android.widget.Toast.makeText(
+                            ctx, "Falló la grabación (sin datos)", android.widget.Toast.LENGTH_LONG,
+                        ).show()
+                    } else {
+                        ShareUtils.shareUris(ctx, uris, video = true)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("DankoTV", "REC flow: share falló $e")
+                }
+            }
+        }
+    }
+
+    fun toggleRec() {
+        if (player.recording.value) {
+            stopRecAndShare()
+            return
+        }
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val dir = java.io.File(ctx.cacheDir, "DankoTV")
+                val base = ShareUtils.baseName(curTitle)
+                player.startRecording(dir, base)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    /** Foto del frame + compartir. */
+    fun snapAndShare() {
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            var uri: android.net.Uri? = null
+            try {
+                val dir = java.io.File(ctx.cacheDir, "DankoTV")
+                if (!dir.exists()) dir.mkdirs()
+                val base = ShareUtils.baseName(curTitle)
+                val tmp = java.io.File(dir, "$base.jpg")
+                if (player.screenshot(tmp.absolutePath) && tmp.length() > 0) {
+                    uri = ShareUtils.saveToGallery(ctx, tmp, "$base.jpg", "image")
+                    tmp.delete()
+                }
+            } catch (_: Exception) {
+            }
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                uri?.let { ShareUtils.shareUris(ctx, listOf(it), video = false) }
+            }
+        }
+    }
+
+    /** Cerrar el player (si grababa, primero guarda+comparte). */
+    fun closePlayer() {
+        if (player.recording.value) stopRecAndShare()
+        player.stop()
+        onClose()
+    }
+
     val label = when (val s = state) {
         PlayerState.Idle -> "Detenido"
         PlayerState.Loading -> "Cargando…"
@@ -312,7 +423,8 @@ fun PlayerScreen(
         if (controls) {
             Column(Modifier.fillMaxSize()) {
                 Text(
-                    "$curTitle  ·  $label",
+                    (if (recording) "● REC ${fmtRec(recSecs)} · " else "") +
+                        "$curTitle  ·  $label",
                     color = if (state is PlayerState.Playing && isLive) DankoOrange else DankoMuted,
                     fontSize = 13.sp,
                     // En landscape el título esquiva la cámara (cutout lateral).
@@ -379,6 +491,32 @@ fun PlayerScreen(
                                 ) { Text(if (zoomFactor > 1f) "⊡" else "⤢") }
                             }
                         }
+                        // F4-rec (SOLO teléfono): grabar + foto. En TV no aparecen
+                        // (el usuario solo comparte desde el teléfono).
+                        if (!isTv) {
+                            item {
+                                Button(
+                                    onClick = { toggleRec() },
+                                    modifier = Modifier.tvFocusBorder(),
+                                ) {
+                                    // Punto/cuadrado DIBUJADOS en rojo puro: el glifo
+                                    // ⏺ (U+23FA) lo dibuja la fuente emoji en blanco
+                                    // e IGNORA el color del Text (16/09).
+                                    Box(
+                                        Modifier.size(18.dp).background(
+                                            Color.Red,
+                                            if (recording) RectangleShape else CircleShape,
+                                        ),
+                                    )
+                                }
+                            }
+                            item {
+                                Button(
+                                    onClick = { snapAndShare() },
+                                    modifier = Modifier.tvFocusBorder(),
+                                ) { Text("📷") }
+                            }
+                        }
                         if (hasQueue) {
                             item {
                                 Button(
@@ -389,15 +527,12 @@ fun PlayerScreen(
                         }
                         item {
                             Button(
-                                onClick = {
-                                    player.stop()
-                                    onClose()
-                                },
+                                onClick = { closePlayer() },
                                 modifier = Modifier.tvFocusBorder(),
                             ) { Text("⏹") }
                         }
                         item {
-                            TextButton(onClick = onClose, modifier = Modifier.tvFocusBorder()) { Text("✕ Cerrar") }
+                            TextButton(onClick = { closePlayer() }, modifier = Modifier.tvFocusBorder()) { Text("✕ Cerrar") }
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
