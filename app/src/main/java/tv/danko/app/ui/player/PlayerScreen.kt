@@ -308,7 +308,7 @@ fun PlayerScreen(
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                 try {
                     android.widget.Toast.makeText(
-                        ctx, "Procesando video…", android.widget.Toast.LENGTH_SHORT,
+                        ctx, "Procesando video…", android.widget.Toast.LENGTH_LONG,
                     ).show()
                 } catch (_: Exception) {
                 }
