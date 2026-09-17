@@ -42,7 +42,7 @@ class ClipTranscoderTest {
 
     @Test
     fun presupuesto4MB() {
-        // 10s a 3Mbps video + 128kbps audio ≈ 3.9MB.
+        // 10s a 2.5Mbps video + 128kbps audio ≈ 3.3MB.
         val bytes = (10L * (ClipTranscoder.VIDEO_BITRATE + ClipTranscoder.AUDIO_BITRATE) / 8)
         assertTrue(bytes <= 4L * 1024 * 1024)
     }

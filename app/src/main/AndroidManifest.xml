@@ -29,5 +29,10 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Self-test oculto de transcodificación (solo adb). -->
+        <activity
+            android:name=".ui.player.TranscodeTestActivity"
+            android:exported="true" />
     </application>
 </manifest>

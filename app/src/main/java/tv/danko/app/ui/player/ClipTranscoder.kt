@@ -22,13 +22,13 @@ import java.nio.ByteBuffer
  * frames, headers válidos (SPS del propio encoder).
  *
  * Presupuesto (pedido del usuario): 10s → máx 4MB, calidad de teléfono.
- * Video 3.0 Mbps + audio 128 kbps ≈ 3.9MB cada 10s. Se conserva la
+ * Video 2.5 Mbps + audio 128 kbps ≈ 3.3MB cada 10s. Se conserva la
  * resolución de origen (típico 1080p/576p): a 3 Mbps es calidad de
  * teléfono sin reescalado (menos código, menos riesgo).
  */
 object ClipTranscoder {
 
-    const val VIDEO_BITRATE = 3_000_000
+    const val VIDEO_BITRATE = 2_500_000
     const val AUDIO_BITRATE = 128_000
     private const val DEQ_TIMEOUT_US = 10_000L
     private const val MAX_WALL_MS = 120_000L
@@ -488,15 +488,19 @@ object ClipTranscoder {
                     }
                 }
 
-                // Audio: decode → encode directo (formato conocido de entrada).
-                if (hasAudio && !aEncEosOut) {
+                // Audio: el DECODER se drena siempre hasta su EOS (aunque el
+                // encoder ya haya terminado: si no, tapa sus inputs, el
+                // extractor se clava y el video se muere de hambre — bug 16/09
+                // diagnosticado por el watchdog STALL).
+                if (hasAudio) {
+                    if (!aDecEosOut) {
                     var audioGuard = 0
                     while (audioGuard++ < 32) {
                         val out = aDec!!.dequeueOutputBuffer(info, 0)
                         if (out >= 0) {
                             progressed = true
                             val eos = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
-                            if (info.size > 0 && aEncInIdx < q.targetA) {
+                            if (info.size > 0 && !aEncEosQueued && aEncInIdx < q.targetA) {
                                 val bb = aDec!!.getOutputBuffer(out)!!
                                 val bytes = ByteArray(info.size)
                                 bb.position(info.offset)
@@ -528,6 +532,7 @@ object ClipTranscoder {
                         }
                         if (aDecEosOut) break
                     }
+                    } // fin drain decoder audio (siempre, aunque el encoder haya terminado)
                     if (!aEncEosQueued && (aEncInIdx >= q.targetA || (aDecEosOut && extractorDoneA))) {
                         val bi = aEnc!!.dequeueInputBuffer(DEQ_TIMEOUT_US)
                         if (bi >= 0) {
