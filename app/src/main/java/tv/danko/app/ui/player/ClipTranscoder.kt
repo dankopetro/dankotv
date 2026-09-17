@@ -270,19 +270,24 @@ object ClipTranscoder {
             val t0 = SystemClock.uptimeMillis()
             var extractorDoneV = false
             var extractorDoneA = !hasAudio
+            var progressed = false
+            var lastProgress = SystemClock.uptimeMillis()
 
             fun feedDecoder(dec: MediaCodec, isVideo: Boolean) {
-                if (isVideo) {
-                    if (vInEos) return
-                } else {
-                    if (aInEos) return
-                }
+                val trackDone = if (isVideo) vInEos else aInEos
                 val wantTrack = if (isVideo) vIdx else aIdx
                 // El extractor es compartido: solo avanzar en nuestro turno.
+                // Si ESTE track ya terminó y el extractor está parado en un
+                // sample nuestro, SALTARLO (si no, el otro track se muere de
+                // hambre y el loop se cuelga para siempre — bug 16/09).
                 var guard = 0
                 while (guard++ < 64) {
                     val t = extractor!!.sampleTrackIndex
                     if (t < 0) {
+                        if (trackDone) {
+                            if (isVideo) extractorDoneV = true else extractorDoneA = true
+                            return
+                        }
                         val bi = dec.dequeueInputBuffer(DEQ_TIMEOUT_US)
                         if (bi >= 0) {
                             dec.queueInputBuffer(
@@ -300,11 +305,17 @@ object ClipTranscoder {
                         return
                     }
                     if (t != wantTrack) return // turno del otro track
+                    if (trackDone) {
+                        extractor.advance() // nuestro, pero ya no lo queremos
+                        progressed = true
+                        continue
+                    }
                     val buf = if (isVideo) vBuf else aBuf
                     buf.clear()
                     val sz = extractor.readSampleData(buf, 0)
                     if (sz < 0) {
                         extractor.advance()
+                        progressed = true
                         continue
                     }
                     val bi = dec.dequeueInputBuffer(DEQ_TIMEOUT_US)
@@ -321,6 +332,7 @@ object ClipTranscoder {
                     ib.put(buf)
                     dec.queueInputBuffer(bi, 0, sz, extractor.sampleTime, extractor.sampleFlags)
                     extractor.advance()
+                    progressed = true
                     return
                 }
             }
@@ -334,10 +346,11 @@ object ClipTranscoder {
                 if (!vInEos || !vDecEosOut) feedDecoder(vDec, true)
                 if (hasAudio && (!aInEos || !aDecEosOut)) feedDecoder(aDec!!, false)
 
-                // Drenar decoder de video → cola de crudos.
+                // Drenar decoder de video → cola de crudos (poll, no bloquea).
                 run {
-                    val out = vDec.dequeueOutputBuffer(info, DEQ_TIMEOUT_US)
+                    val out = vDec.dequeueOutputBuffer(info, 0)
                     if (out >= 0) {
+                        progressed = true
                         val eos = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
                         if (info.size > 0) {
                             if (!vColorConfirmed) {
@@ -378,6 +391,7 @@ object ClipTranscoder {
                         }
                         if (eos) vDecEosOut = true
                     } else if (out == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                        progressed = true
                         try {
                             val actual = vDec.outputFormat
                                 .getInteger(MediaFormat.KEY_COLOR_FORMAT)
@@ -426,6 +440,7 @@ object ClipTranscoder {
                         ib.put(bytes, 0, sz)
                         vEnc!!.queueInputBuffer(bi, 0, sz, vEncInIdx * 1_000_000L / q.fpsLong, 0)
                         vEncInIdx++
+                        progressed = true
                     }
                     if (!vEncEosQueued && (vEncInIdx >= q.targetV || (vDecEosOut && rawQueue.isEmpty()))) {
                         val bi = vEnc!!.dequeueInputBuffer(DEQ_TIMEOUT_US)
@@ -435,6 +450,7 @@ object ClipTranscoder {
                                 MediaCodec.BUFFER_FLAG_END_OF_STREAM,
                             )
                             vEncEosQueued = true
+                            progressed = true
                         }
                     }
                     // Drenar encoder → lista (el CSD se saltea: ya va en el formato).
@@ -442,6 +458,7 @@ object ClipTranscoder {
                     while (drainGuard++ < 32) {
                         val out = vEnc!!.dequeueOutputBuffer(info, 0)
                         if (out >= 0) {
+                            progressed = true
                             val eos = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
                             val cfg = info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
                             if (info.size > 0 && !cfg) {
@@ -477,6 +494,7 @@ object ClipTranscoder {
                     while (audioGuard++ < 32) {
                         val out = aDec!!.dequeueOutputBuffer(info, 0)
                         if (out >= 0) {
+                            progressed = true
                             val eos = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
                             if (info.size > 0 && aEncInIdx < q.targetA) {
                                 val bb = aDec!!.getOutputBuffer(out)!!
@@ -494,6 +512,7 @@ object ClipTranscoder {
                                             aEncInIdx * 1024L * 1_000_000L / audioRate, 0,
                                         )
                                         aEncInIdx++
+                                        progressed = true
                                     }
                                 }
                             }
@@ -517,12 +536,14 @@ object ClipTranscoder {
                                 MediaCodec.BUFFER_FLAG_END_OF_STREAM,
                             )
                             aEncEosQueued = true
+                            progressed = true
                         }
                     }
                     var drainGuard = 0
                     while (drainGuard++ < 32) {
                         val out = aEnc!!.dequeueOutputBuffer(info, 0)
                         if (out >= 0) {
+                            progressed = true
                             val eos = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
                             val cfg = info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
                             if (info.size > 0 && !cfg) {
@@ -542,6 +563,7 @@ object ClipTranscoder {
                                 break
                             }
                         } else if (out == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                            progressed = true
                             try {
                                 aEncFormat = aEnc!!.outputFormat
                             } catch (_: Exception) {
@@ -552,6 +574,21 @@ object ClipTranscoder {
                     }
                 } else if (!hasAudio) {
                     aEncEosOut = true
+                }
+                // Watchdog: sin progreso 20s = cuelgue; diagnosticar y abortar
+                // (antes el loop giraba mudo para siempre — bug 16/09).
+                if (progressed) {
+                    progressed = false
+                    lastProgress = SystemClock.uptimeMillis()
+                } else {
+                    try {
+                        Thread.sleep(5)
+                    } catch (_: Exception) {
+                    }
+                    if (SystemClock.uptimeMillis() - lastProgress > 20_000L) {
+                        log("transcode: STALL vIn=$vInEos vDecEos=$vDecEosOut vDecOut=$vDecOutCount rawQ=${rawQueue.size} vEncIn=$vEncInIdx/${q.targetV} vEncEosQ=$vEncEosQueued vEncEos=$vEncEosOut vSamp=${vEncSamples.size} aIn=$aInEos aDecEos=$aDecEosOut aEncIn=$aEncInIdx/${q.targetA} aEncEosQ=$aEncEosQueued aEncEos=$aEncEosOut aSamp=${aEncSamples.size} xDone=$extractorDoneV/$extractorDoneA")
+                        return false
+                    }
                 }
             }
 

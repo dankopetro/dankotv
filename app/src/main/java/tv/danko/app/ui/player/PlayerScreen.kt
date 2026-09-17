@@ -303,9 +303,10 @@ fun PlayerScreen(
     /** Detiene, remuxea a .mp4 válido, guarda en galería y abre compartir. */
     fun stopRecAndShare() {
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val uris: List<android.net.Uri> = try {
             val files = player.stopRecording()
             ShareUtils.recLog(ctx, "REC flow: ${files.size} segmentos")
-            val uris = files.mapNotNull { f ->
+            files.mapNotNull { f ->
                 try {
                     val src = java.io.File(f)
                     ShareUtils.recLog(ctx, "REC flow: seg ${src.name} size=${src.length()}")
@@ -345,6 +346,19 @@ fun PlayerScreen(
                     ShareUtils.recLog(ctx, "REC flow: excepción $e")
                     null
                 }
+            }
+            } catch (e: Exception) {
+                // Nunca morir en silencio: cualquier fallo inesperado avisa.
+                ShareUtils.recLog(ctx, "REC flow: fallo inesperado $e")
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    try {
+                        android.widget.Toast.makeText(
+                            ctx, "Falló la grabación ($e)", android.widget.Toast.LENGTH_LONG,
+                        ).show()
+                    } catch (_: Exception) {
+                    }
+                }
+                return@launch
             }
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                 try {
