@@ -26,7 +26,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.material3.Button
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -514,32 +519,32 @@ fun PlayerScreen(
                                 Button(
                                     onClick = { stepChannel(-1) },
                                     modifier = Modifier.tvFocusBorder(),
-                                ) { Text("⏮") }
+                                ) { PrevIcon() }
                             }
                             item {
                                 Button(
                                     onClick = { stepChannel(1) },
                                     modifier = Modifier.tvFocusBorder(),
-                                ) { Text("⏭") }
+                                ) { NextIcon() }
                             }
                         }
                         item {
                             Button(
                                 onClick = { paused = player.togglePause() },
                                 modifier = Modifier.focusRequester(pauseFocus).tvFocusBorder(),
-                            ) { Text(if (paused) "▶" else "⏸") }
+                            ) { if (paused) PlayIcon() else PauseIcon() }
                         }
                         item {
                             Button(
                                 onClick = { muted = player.toggleMute() },
                                 modifier = Modifier.tvFocusBorder(),
-                            ) { Text(if (muted) "🔇" else "🔊") }
+                            ) { if (muted) MutedIcon() else MuteIcon() }
                         }
                         item {
                             Button(
                                 onClick = { applyFullscreen(!fullscreen) },
                                 modifier = Modifier.tvFocusBorder(),
-                            ) { Text("⛶") }
+                            ) { FullscreenIcon() }
                         }
                         // Zoom llenar/ajustar (SOLO landscape no-TV): recorta
                         // arriba/abajo sin deformar, estilo VLC. En TV no va
@@ -549,7 +554,7 @@ fun PlayerScreen(
                                 Button(
                                     onClick = { toggleFill() },
                                     modifier = Modifier.tvFocusBorder(),
-                                ) { Text(if (zoomFactor > 1f) "⊡" else "⤢") }
+                                ) { if (zoomFactor > 1f) ZoomOutIcon() else ZoomInIcon() }
                             }
                         }
                         // F4-rec (SOLO teléfono): grabar + foto. En TV no aparecen
@@ -575,7 +580,7 @@ fun PlayerScreen(
                                 Button(
                                     onClick = { snapAndShare() },
                                     modifier = Modifier.tvFocusBorder(),
-                                ) { Text("📷") }
+                                ) { PhotoIcon() }
                             }
                         }
                         if (hasQueue) {
@@ -588,6 +593,9 @@ fun PlayerScreen(
                                     // si no): los glifos ★/☆ no los dibuja la
                                     // fuente de algunos teléfonos y el botón
                                     // quedaba vacío (16/09). Igual que el REC.
+                                    // El color es el del resto de los iconos
+                                    // (naranja sobre naranja = invisible).
+                                    val tint = LocalContentColor.current
                                     Canvas(Modifier.size(20.dp)) {
                                         val cx = size.width / 2f
                                         val cy = size.height / 2f
@@ -604,10 +612,10 @@ fun PlayerScreen(
                                             close()
                                         }
                                         if (fav) {
-                                            drawPath(path, DankoOrange)
+                                            drawPath(path, tint)
                                         } else {
                                             drawPath(
-                                                path, DankoOrange,
+                                                path, tint,
                                                 style = androidx.compose.ui.graphics.drawscope.Stroke(
                                                     width = 2.dp.toPx(),
                                                 ),
@@ -621,7 +629,7 @@ fun PlayerScreen(
                             Button(
                                 onClick = { closePlayer() },
                                 modifier = Modifier.tvFocusBorder(),
-                            ) { Text("⏹") }
+                            ) { StopIcon() }
                         }
                         item {
                             TextButton(onClick = { closePlayer() }, modifier = Modifier.tvFocusBorder()) { Text("✕ Cerrar") }
@@ -642,5 +650,212 @@ fun PlayerScreen(
                 }
             }
         }
+    }
+}
+
+/**
+ * Iconos DIBUJADOS de los controles (Canvas): los glifos/emoji dependen de
+ * la fuente del teléfono (el ⏺ salía blanco, el ★/☆ ni aparecía) y el color
+ * forzado puede mimetizarse con el botón (estrella naranja sobre naranja).
+ * Dibujados con el color de contenido del botón: se ven en todos lados.
+ */
+@Composable
+private fun PrevIcon(tint: Color = LocalContentColor.current) {
+    Canvas(Modifier.size(20.dp)) {
+        val h = size.height
+        val w = size.width
+        val barW = 3.dp.toPx()
+        drawRect(tint, topLeft = Offset.Zero, size = Size(barW, h))
+        val x0 = barW + 1.dp.toPx()
+        val path = Path().apply {
+            moveTo(x0, 0f)
+            lineTo(x0, h)
+            lineTo(x0 + (w - x0) / 2f, h / 2f)
+            close()
+            moveTo(x0 + (w - x0) / 2f, 0f)
+            lineTo(x0 + (w - x0) / 2f, h)
+            lineTo(w, h / 2f)
+            close()
+        }
+        drawPath(path, tint)
+    }
+}
+
+@Composable
+private fun NextIcon(tint: Color = LocalContentColor.current) {
+    Canvas(Modifier.size(20.dp)) {
+        val h = size.height
+        val w = size.width
+        val barW = 3.dp.toPx()
+        drawRect(tint, topLeft = Offset(w - barW, 0f), size = Size(barW, h))
+        val x1 = w - barW - 1.dp.toPx()
+        val path = Path().apply {
+            moveTo(x1, 0f)
+            lineTo(x1, h)
+            lineTo(x1 - (x1) / 2f, h / 2f)
+            close()
+            moveTo(x1 - x1 / 2f, 0f)
+            lineTo(x1 - x1 / 2f, h)
+            lineTo(0f, h / 2f)
+            close()
+        }
+        drawPath(path, tint)
+    }
+}
+
+@Composable
+private fun PlayIcon(tint: Color = LocalContentColor.current) {
+    Canvas(Modifier.size(20.dp)) {
+        val path = Path().apply {
+            moveTo(2.dp.toPx(), 0f)
+            lineTo(2.dp.toPx(), size.height)
+            lineTo(size.width - 2.dp.toPx(), size.height / 2f)
+            close()
+        }
+        drawPath(path, tint)
+    }
+}
+
+@Composable
+private fun PauseIcon(tint: Color = LocalContentColor.current) {
+    Canvas(Modifier.size(20.dp)) {
+        val bw = 5.dp.toPx()
+        drawRect(tint, topLeft = Offset(2.dp.toPx(), 0f), size = Size(bw, size.height))
+        drawRect(tint, topLeft = Offset(size.width - 2.dp.toPx() - bw, 0f), size = Size(bw, size.height))
+    }
+}
+
+@Composable
+private fun StopIcon(tint: Color = LocalContentColor.current) {
+    Canvas(Modifier.size(20.dp)) {
+        val m = 2.dp.toPx()
+        drawRect(tint, topLeft = Offset(m, m), size = Size(size.width - 2 * m, size.height - 2 * m))
+    }
+}
+
+private fun speakerPath(w: Float, h: Float): Path = Path().apply {
+    moveTo(0f, h * 0.4f)
+    lineTo(w * 0.3f, h * 0.4f)
+    lineTo(w * 0.6f, h * 0.1f)
+    lineTo(w * 0.6f, h * 0.9f)
+    lineTo(w * 0.3f, h * 0.6f)
+    lineTo(0f, h * 0.6f)
+    close()
+}
+
+@Composable
+private fun MuteIcon(tint: Color = LocalContentColor.current) {
+    Canvas(Modifier.size(20.dp)) {
+        drawPath(speakerPath(size.width, size.height), tint)
+        val s = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+        drawArc(tint, -45f, 90f, false, Offset(size.width * 0.6f, size.height * 0.15f), Size(size.width * 0.35f, size.height * 0.7f), style = s)
+        drawArc(tint, -45f, 90f, false, Offset(size.width * 0.75f, 0f), Size(size.width * 0.35f, size.height), style = s)
+    }
+}
+
+@Composable
+private fun MutedIcon(tint: Color = LocalContentColor.current) {
+    Canvas(Modifier.size(20.dp)) {
+        drawPath(speakerPath(size.width, size.height), tint)
+        val s = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round)
+        val x0 = size.width * 0.68f
+        val x1 = size.width - 1.dp.toPx()
+        drawLine(tint, Offset(x0, size.height * 0.35f), Offset(x1, size.height * 0.65f), strokeWidth = s.width, cap = s.cap)
+        drawLine(tint, Offset(x0, size.height * 0.65f), Offset(x1, size.height * 0.35f), strokeWidth = s.width, cap = s.cap)
+    }
+}
+
+@Composable
+private fun FullscreenIcon(tint: Color = LocalContentColor.current) {
+    Canvas(Modifier.size(20.dp)) {
+        val w = 5.dp.toPx()
+        val l = 7.dp.toPx()
+        val m = 1.dp.toPx()
+        val H = size.height
+        val W = size.width
+        val s = Stroke(width = w, cap = StrokeCap.Round)
+        // 4 esquinas en L.
+        drawLine(tint, Offset(m, m), Offset(m + l, m), strokeWidth = s.width, cap = s.cap)
+        drawLine(tint, Offset(W - m - l, m), Offset(W - m, m), strokeWidth = s.width, cap = s.cap)
+        drawLine(tint, Offset(W - m, m), Offset(W - m, m + l), strokeWidth = s.width, cap = s.cap)
+        drawLine(tint, Offset(m, H - m - l), Offset(m, H - m), strokeWidth = s.width, cap = s.cap)
+        drawLine(tint, Offset(m, H - m), Offset(m + l, H - m), strokeWidth = s.width, cap = s.cap)
+        drawLine(tint, Offset(W - m - l, H - m), Offset(W - m, H - m), strokeWidth = s.width, cap = s.cap)
+        drawLine(tint, Offset(W - m, H - m), Offset(W - m, H - m - l), strokeWidth = s.width, cap = s.cap)
+    }
+}
+
+private fun arrowHead(path: Path, tipX: Float, tipY: Float, dx: Float, dy: Float, s: Float) {
+    // Cabeza de flecha simple (dos trazos) en la punta (tipX, tipY).
+    val a = kotlin.math.atan2(dy, dx)
+    val a1 = a + Math.PI * 0.85f
+    val a2 = a - Math.PI * 0.85f
+    path.moveTo(tipX, tipY)
+    path.lineTo((tipX + s * kotlin.math.cos(a1)).toFloat(), (tipY + s * kotlin.math.sin(a1)).toFloat())
+    path.moveTo(tipX, tipY)
+    path.lineTo((tipX + s * kotlin.math.cos(a2)).toFloat(), (tipY + s * kotlin.math.sin(a2)).toFloat())
+}
+
+@Composable
+private fun ZoomInIcon(tint: Color = LocalContentColor.current) {
+    // Expandir: 4 flechas hacia afuera.
+    Canvas(Modifier.size(20.dp)) {
+        val m = 4.dp.toPx()
+        val c = 8.dp.toPx()
+        val W = size.width
+        val H = size.height
+        val s = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+        val pts = arrayOf(
+            floatArrayOf(c, c, m, m),
+            floatArrayOf(W - c, c, W - m, m),
+            floatArrayOf(c, H - c, m, H - m),
+            floatArrayOf(W - c, H - c, W - m, H - m),
+        )
+        for (p in pts) {
+            drawLine(tint, Offset(p[0], p[1]), Offset(p[2], p[3]), strokeWidth = s.width, cap = s.cap)
+            val hp = Path()
+            arrowHead(hp, p[2], p[3], p[2] - p[0], p[3] - p[1], 4.dp.toPx())
+            drawPath(hp, tint, style = androidx.compose.ui.graphics.drawscope.Stroke(width = s.width, cap = s.cap))
+        }
+    }
+}
+
+@Composable
+private fun ZoomOutIcon(tint: Color = LocalContentColor.current) {
+    // Comprimir: 4 flechas hacia adentro.
+    Canvas(Modifier.size(20.dp)) {
+        val m = 4.dp.toPx()
+        val c = 8.dp.toPx()
+        val W = size.width
+        val H = size.height
+        val s = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+        val pts = arrayOf(
+            floatArrayOf(m, m, c, c),
+            floatArrayOf(W - m, m, W - c, c),
+            floatArrayOf(m, H - m, c, H - c),
+            floatArrayOf(W - m, H - m, W - c, H - c),
+        )
+        for (p in pts) {
+            drawLine(tint, Offset(p[0], p[1]), Offset(p[2], p[3]), strokeWidth = s.width, cap = s.cap)
+            val hp = Path()
+            arrowHead(hp, p[2], p[3], p[2] - p[0], p[3] - p[1], 4.dp.toPx())
+            drawPath(hp, tint, style = androidx.compose.ui.graphics.drawscope.Stroke(width = s.width, cap = s.cap))
+        }
+    }
+}
+
+@Composable
+private fun PhotoIcon(tint: Color = LocalContentColor.current) {
+    Canvas(Modifier.size(20.dp)) {
+        val W = size.width
+        val H = size.height
+        val s = Stroke(width = 2.dp.toPx())
+        // Cuerpo.
+        drawRect(tint, Offset(1.dp.toPx(), H * 0.28f), Size(W - 2.dp.toPx(), H * 0.62f), style = s)
+        // Visor.
+        drawRect(tint, Offset(W * 0.32f, H * 0.12f), Size(W * 0.2f, H * 0.16f), style = s)
+        // Lente.
+        drawCircle(tint, radius = H * 0.2f, center = Offset(W / 2f, H * 0.59f), style = s)
+        drawCircle(tint, radius = H * 0.07f, center = Offset(W / 2f, H * 0.59f))
     }
 }
