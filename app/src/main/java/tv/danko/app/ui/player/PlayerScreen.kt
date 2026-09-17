@@ -303,6 +303,16 @@ fun PlayerScreen(
     /** Detiene, remuxea a .mp4 válido, guarda en galería y abre compartir. */
     fun stopRecAndShare() {
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            // Feedback INSTANTÁNEO: el transcode tarda segundos y sin esto
+            // parece muerto (pedido del usuario 16/09 — "otro golazo").
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                try {
+                    android.widget.Toast.makeText(
+                        ctx, "Procesando video…", android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                } catch (_: Exception) {
+                }
+            }
             val uris: List<android.net.Uri> = try {
             val files = player.stopRecording()
             ShareUtils.recLog(ctx, "REC flow: ${files.size} segmentos")
