@@ -314,9 +314,8 @@ fun PlayerScreen(
                         ShareUtils.recLog(ctx, "REC flow: segmento vacío, descartado")
                         return@mapNotNull null
                     }
-                    // .ts del dump → .mp4 con timestamps re-sellados desde 0
-                    // (los PTS del proveedor traen escalas basura que rompen
-                    // el stop() del muxer y confunden a WhatsApp).
+                    // .ts del dump → .mp4 transcodificado (H264+AAC, timestamps
+                    // limpios del encoder, duración exacta por conteo de frames).
                     // Trim al span real (un solo segmento): el dump trae
                     // ~45s previos al REC que confunden (59s por 10s).
                     val spanUs = if (files.size == 1) {
@@ -325,13 +324,13 @@ fun PlayerScreen(
                         0L
                     }
                     val mp4 = java.io.File(src.parent, src.nameWithoutExtension + ".mp4")
-                    val ok = ShareUtils.remuxTsToMp4(src, mp4, spanUs, player.videoFps) {
+                    val ok = ClipTranscoder.transcode(src, mp4, spanUs, player.videoFps) {
                         ShareUtils.recLog(ctx, it)
                     }
-                    ShareUtils.recLog(ctx, "REC flow: remux ok=$ok mp4=${mp4.length()}")
+                    ShareUtils.recLog(ctx, "REC flow: transcode ok=$ok mp4=${mp4.length()}")
                     src.delete()
                     if (!ok || !ShareUtils.hasAvTracks(mp4)) {
-                        ShareUtils.recLog(ctx, "REC flow: remux inválido, se descarta")
+                        ShareUtils.recLog(ctx, "REC flow: transcode inválido, se descarta")
                         try {
                             mp4.delete()
                         } catch (_: Exception) {
