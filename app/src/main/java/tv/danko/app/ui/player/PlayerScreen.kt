@@ -8,6 +8,7 @@ import android.os.Build
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.rememberTransformableState
@@ -582,7 +583,38 @@ fun PlayerScreen(
                                 Button(
                                     onClick = { scope.launch { toggleFav() } },
                                     modifier = Modifier.tvFocusBorder(),
-                                ) { Text(if (fav) "★" else "☆", color = DankoOrange) }
+                                ) {
+                                    // Estrella DIBUJADA (rellena si fav, contorno
+                                    // si no): los glifos ★/☆ no los dibuja la
+                                    // fuente de algunos teléfonos y el botón
+                                    // quedaba vacío (16/09). Igual que el REC.
+                                    Canvas(Modifier.size(20.dp)) {
+                                        val cx = size.width / 2f
+                                        val cy = size.height / 2f
+                                        val outer = size.minDimension / 2f
+                                        val inner = outer * 0.382f
+                                        val path = androidx.compose.ui.graphics.Path().apply {
+                                            for (i in 0 until 10) {
+                                                val ang = -Math.PI / 2 + i * Math.PI / 5
+                                                val rad = if (i % 2 == 0) outer else inner
+                                                val x = (cx + rad * kotlin.math.cos(ang)).toFloat()
+                                                val y = (cy + rad * kotlin.math.sin(ang)).toFloat()
+                                                if (i == 0) moveTo(x, y) else lineTo(x, y)
+                                            }
+                                            close()
+                                        }
+                                        if (fav) {
+                                            drawPath(path, DankoOrange)
+                                        } else {
+                                            drawPath(
+                                                path, DankoOrange,
+                                                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                                                    width = 2.dp.toPx(),
+                                                ),
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                         item {
