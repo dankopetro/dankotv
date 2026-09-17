@@ -292,9 +292,11 @@ object ShareUtils {
             val info = android.media.MediaCodec.BufferInfo()
             var samples = 0
             var first = ""
-            // Timestamps SINTETIZADOS por conteo (inmunes a PTS basura): video
-            // a fps nominal, audio a 1024 samples/frame. Duración exacta por
-            // construcción y stop() del muxer sin sorpresas.
+            // Timestamps REALES del extractor (extractor.sampleTime): video
+            // en orden de llegada (el extractor entrega en decode order).
+            // Fluidez natural: los frames se muestran en su orden temporal real.
+            // La duración total variará ligeramente al milisegundo, pero el video
+            // será fluido sin frames para adelante/atrás.
             val fps = videoFps.coerceIn(1.0, 120.0)
             val aRate = try {
                 tracks.firstOrNull { !it.isVideo }
@@ -302,54 +304,34 @@ object ShareUtils {
             } catch (_: Exception) {
                 48000
             }.coerceIn(8000, 192000)
-            log("remux: synth fps=$fps aRate=$aRate")
+
             var vCount = 0L
             var aCount = 0L
-            var vSeq = 0L
-            val reorder = PtsReorder(16)
-            fun writeVideo(idx: Int, b: ByteArray, size: Int, flags: Int) {
-                info.offset = 0
-                info.size = size
-                info.presentationTimeUs = vCount * 1_000_000L / fps.toLong()
-                info.flags = flags
-                vCount += 1
-                muxer.writeSampleData(trackMap[idx] ?: return, java.nio.ByteBuffer.wrap(b, 0, size), info)
-            }
             val videoIdx = tracks.firstOrNull { it.isVideo }?.srcIdx ?: -1
-            try {
-                while (true) {
-                    val track = extractor.sampleTrackIndex
-                    if (track < 0) break
-                    info.offset = 0
-                    info.size = extractor.readSampleData(buf, 0)
-                    if (info.size < 0) break
-                    val isVid = track == videoIdx
-                    val flags = extractor.sampleFlags
-                    if (samples == 0) {
-                        first = "track=$track size=${info.size} flags=$flags"
-                    }
-                    if (isVid) {
-                        // Copia propia: el reorder retiene (el buf se reusa).
-                        val bytes = buf.array().copyOf(info.size)
-                        val ready = reorder.push(vSeq++, extractor.sampleTime, bytes, info.size, flags)
-                        if (ready != null) writeVideo(track, ready.bytes, ready.size, ready.flags)
-                    } else {
-                        info.presentationTimeUs = aCount * 1024L * 1_000_000L / aRate
-                        aCount += 1
-                        muxer.writeSampleData(trackMap[track] ?: break, buf, info)
-                    }
-                    extractor.advance()
-                    samples += 1
+
+            while (true) {
+                val track = extractor.sampleTrackIndex
+                if (track < 0) break
+                info.offset = 0
+                info.size = extractor.readSampleData(buf, 0)
+                if (info.size < 0) break
+                val isVid = track == videoIdx
+                info.flags = extractor.sampleFlags
+
+                if (isVid) {
+                    info.presentationTimeUs = extractor.sampleTime
+                    vCount += 1
+                } else {
+                    info.presentationTimeUs = aCount * 1024L * 1_000_000L / aRate
+                    aCount += 1
                 }
-                // Drenar reorder en orden de presentación.
-                for (it in reorder.drain()) writeVideo(videoIdx, it.bytes, it.size, it.flags)
-            } catch (e: Exception) {
-                log("remux: write falló en sample $samples: $e")
-                throw e
+                muxer.writeSampleData(trackMap[track] ?: break, buf, info)
+                extractor.advance()
             }
-            log("remux: pre-stop samples=$samples first=[$first]")
+            // Sin reorder, escritura directa en orden de llegada
+            log("remux: pre-stop samples=$vCount first=[track=$videoIdx size=${info.size} flags=${info.flags}]")
             muxer.stop()
-            log("remux: tracks=${trackMap.size} samples=$samples out=${dst.length()} vDur=${vCount * 1_000_000L / fps.toLong()}us")
+            log("remux: tracks=${trackMap.size} samples=$vCount out=${dst.length()}us")
             return dst.exists() && dst.length() > 0
         } catch (e: Exception) {
             log("remux falló: $e")
