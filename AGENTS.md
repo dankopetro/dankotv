@@ -624,6 +624,39 @@ teléfono (TV intacta: botones ocultos con isTv).
   (presents a 60Hz) + ausencia de warnings desync + ojo del usuario.
 - Limpieza galería del usuario: borrar solo archivos de prueba propios con su
   OK (se acumulan .ts/mp4 DankoTV_* de los tests).
+- CORRECCIÓN 16/09 noche: dos "hallazgos" de §9.14 eran ERRORES MÍOS, no del
+  stream: (1) el "mdhd timescale=1438908416" fue un parser python con +8 de
+  offset (los mdhd estaban BIEN: 90000/48000); (2) todo el remux por copia
+  (rebase/reseal/síntesis/reorder/inyección SPS) fue un callejón sin salida:
+  cada fix arreglaba una cosa y rompía otra (duración exacta↔tartamudeo↔
+  pixelado↔48s-por-7s↔congelado). Ver §9.15: la solución fue transcodificar.
+
+### 9.15 ⭐ F4-rec v2 — LA MEJOR VERSIÓN (16/09 noche, versionCode 20, tag `f4-rec-v2-best`)
+Verificado por el usuario: graba 11s → video de 11s, 4.24MB, fluido, a WhatsApp.
+Pipeline NUEVO desde cero (`ClipTranscoder.kt`): dump .ts → decode HW
+→ encode HW H264 + AAC → mux. NADA de timestamps del proveedor: el decoder
+ordena a presentación y el encoder genera PTS limpios. Por eso anda.
+- Presupuesto: video 2.5 Mbps + audio 128k ≈ 3.3–4.2MB cada 10s (pedido:
+  10s ≤ 4MB, calidad de teléfono, se conserva resolución de origen).
+- Duración exacta por CONTEO DE FRAMES decodificados (ventana al final +
+  warmup 4s decodificado-y-tirado para arrancar limpio aunque el corte sea
+  mid-GOP). `computeQuotas()` es matemática pura con tests JVM.
+- Reglas MediaCodec que costaron sangre: (1) el extractor es COMPARTIDO: si
+  un track termina, su alimentador debe SALTAR sus samples (si no, el otro
+  se muere de hambre = cuelgue mudo); (2) el DECODER de audio se drena
+  SIEMPRE hasta su EOS aunque el encoder ya haya terminado (misma causa);
+  (3) drenajes con timeout 0 (poll) + watchdog STALL: sin progreso 20s →
+  log de estado completo + abortar (un cuelgue mudo costó un día entero);
+  (4) buffers CODEC_CONFIG del encoder NO se escriben al muxer; (5) color
+  del encoder = color REAL del decoder (se lee del output, con fallback);
+  (6) stopRecAndShare con try/catch externo → toast SIEMPRE (nunca silencio).
+- Self-test sin UI: `TranscodeTestActivity` (exported, solo adb) + `am start`
+  con extras src/dst/keepUs; resultado en rec.log. Así se validó E2E sin
+  molestar al usuario (dump real 11.5MB → 10.03s, 3.76MB, decode ffmpeg con
+  0 errores, frames nítidos verificados a ojo).
+- Pendiente menor (usuario): el diálogo compartir tarda en aparecer porque
+  el transcode procesa ~300+ frames (segundos). No es bug: es el costo del
+  encode. Mejora posible (no hecha): toast "Procesando video…" inmediato.
 ---
 
 ## 10. Proyecto viejo `/home/claudio/AndroidStudioProjects/DankoIPTV` (com.danko.iptv)
