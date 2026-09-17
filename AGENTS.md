@@ -308,19 +308,25 @@ en recomposición NO está soportado), AppContainer (sin helpers extra), TvFocus
 skin), ListsRepository (`specOf()` reconstruye spec para reload). Tests: 24 JVM verdes
 (nuevos: FAV_GROUP filtra, reload baja de nuevo del server, last_group persiste).
 
-### 8.4 F4–F7 (futuro, ya decidido)
-- **F4 grabación + captura**: `stream-record` de mpv NATIVO (no ffmpeg externo) a
-  MediaStore (scoped storage Android 10+; NO rutas libres). Screenshot vía mpv
-  `screenshot-to-file` a MediaStore.Images.
-- **F5 Cast**: copiar `CastOptionsProvider.java` del viejo proyecto + cast-framework/
-  mediarouter; una sola vía de cast; MediaInfo por tipo de contenido; el StreamProxy
-  del viejo NO se reusa tal cual (inseguro: sin auth, puerto fijo) — si hace falta,
-  reescribir con token LAN + puerto configurable.
-- **F6 EPG + catchup**: tablas Room nuevas (auto-migración, exportSchema ya activo),
-  WorkManager para refrescar EPG en fondo, catchup con URLs por duración (xtream.py
-  Linux de referencia).
-- **F7 release**: signingConfig release (keystore del usuario), App Bundle, GitHub
-  Release (repo del usuario), licencia GPL-3.0 + oferta de fuentes del AAR mpv.
+### 8.4 Roadmap actualizado (decidido con el usuario 16/09 noche: EPG primero)
+Comparativa completa Linux-vs-Android en la sesión del 16/09: lo que falta se
+ataca en este orden. F4 ya ENTREGADA (F4-rec v2 + foto + iconos dibujados).
+- **F5 EPG + catchup** (PRÓXIMO): tablas Room nuevas (auto-migración,
+  exportSchema ya activo), WorkManager para refrescar en fondo (XMLTV/JTV
+  como el motor: epg.py/epg_xmltv.py/epg_jtv.py/multi_epg.py de referencia),
+  guía ahora/siguiente + catchup con URLs por duración (catchup.py Linux).
+  Desbloquea a futuro la grabación programada.
+- **F6 VOD + series Xtream**: el cliente hoy trae solo TV en vivo (marcado
+  "fase posterior" en XtreamClient); agregar películas/series.
+- **F7 Logos + editor de listas**: mostrar logos (hoy se parsean pero no hay
+  loader de imágenes) + editar/renombrar/reordenar listas y ocultar canales.
+- **F8 resto**: Cast (F5 viejo: CastOptionsProvider del proyecto viejo, una
+  sola vía; StreamProxy NO se reusa tal cual — reescribir con token LAN),
+  selector de pistas audio/subtítulos, timeshift real, sleep timer, PIN
+  parental, PiP, i18n (el motor tiene po/), grabación en TV, MediaSession
+  (equivale al MPRIS de Linux), límite de conexiones del proveedor.
+- **F9 release**: signingConfig release (keystore del usuario), App Bundle,
+  GitHub Release (repo del usuario), licencia GPL-3.0 + oferta de fuentes.
 
 ---
 
