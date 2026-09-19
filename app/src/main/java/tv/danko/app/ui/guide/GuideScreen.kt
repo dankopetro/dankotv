@@ -39,7 +39,7 @@ import tv.danko.app.data.db.ChannelEntity
 import tv.danko.app.ui.channels.ChannelsViewModel
 import tv.danko.app.ui.tvFocusBorder
 
-private const val MAX_CHANNELS = 300
+private const val MAX_CHANNELS = 60
 
 private val hourFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
 
@@ -65,10 +65,13 @@ fun GuideScreen(
         loading = true
         try {
             // Mismo ruteo de grupos que ChannelsViewModel (Todas/★/grupo).
+            // Barrido completo con mapa EPG: trae TODOS los que tienen datos,
+            // no solo los primeros (bug 19/09: en "Todas" MEGA/Chile quedaban
+            // fuera del alcance).
             val scope: List<ChannelEntity> = when (groupName) {
-                "Todas" -> repo.channelsPage(listName)
+                "Todas" -> epg.scanGroup(listName, null)
                 ChannelsViewModel.FAV_GROUP -> repo.favoritesPage(listName)
-                else -> repo.groupPage(listName, groupName)
+                else -> epg.scanGroup(listName, groupName)
             }
             val channels = scope.take(MAX_CHANNELS)
             val byUrl = channels.associateBy { it.url }

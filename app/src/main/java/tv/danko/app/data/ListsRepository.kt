@@ -130,6 +130,8 @@ class ListsRepository(
     // --- páginas limitadas (344k canales): display 2000 + COUNT del total ---
 
     suspend fun channelsPage(list: String) = dao.channelsLimited(list, 2000)
+    suspend fun channelsPaged(list: String, group: String?, limit: Int, offset: Int) =
+        dao.channelsPaged(list, group, limit, offset)
     suspend fun countChannels(list: String) = dao.countChannels(list)
     suspend fun groupPage(list: String, group: String) = dao.channelsInGroup(list, group, 2000)
     suspend fun countInGroup(list: String, group: String) = dao.countInGroup(list, group)

@@ -3,6 +3,7 @@ package tv.danko.app.data
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
+import tv.danko.app.data.db.ChannelEntity
 import tv.danko.app.data.db.EpgProgramme
 import tv.danko.app.data.db.PlaylistDao
 import tv.danko.app.data.model.PlaylistSpec
@@ -156,6 +157,46 @@ class EpgRepository(
 
     /** Fila de la grilla para un canal (vacía si no hay datos). */
     data class GuideRow(val channelUrl: String, val programmes: List<EpgEntry>)
+
+    /**
+     * Barrido COMPLETO del grupo buscando canales con guía (hasta 60).
+     * group=null = toda la lista. Usa el mapa EPG: filtra en memoria sin red
+     * y solo consulta los que tienen datos (en "Todas" los 78k no se pueden
+     * traer de una ni probar a ciegas de a 40 — bug 19/09).
+     * Sin mapa (lista no-Xtream): primeros 40 a ciegas, como antes.
+     */
+    suspend fun scanGroup(
+        listName: String,
+        group: String?,
+        maxMatches: Int = MAX_ROWS,
+    ): List<ChannelEntity> = withContext(Dispatchers.IO) {
+        try {
+            val ids = epgStreamIds(listName)
+            if (ids == null) {
+                val page = lists.channelsPaged(listName, group, 40, 0)
+                android.util.Log.i("DankoTV", "EPG scan $listName sin mapa: ${page.size} a ciegas")
+                return@withContext page
+            }
+            if (ids.isEmpty()) return@withContext emptyList()
+            val out = mutableListOf<ChannelEntity>()
+            var offset = 0
+            while (out.size < maxMatches) {
+                val page = lists.channelsPaged(listName, group, 2000, offset)
+                if (page.isEmpty()) break
+                out += page.filter { streamIdFromUrl(it.url) in ids }
+                if (page.size < 2000) break
+                offset += 2000
+            }
+            android.util.Log.i(
+                "DankoTV",
+                "EPG scan $listName grupo=${group ?: "Todas"}: ${out.size} con guía",
+            )
+            out.take(maxMatches)
+        } catch (e: Exception) {
+            android.util.Log.w("DankoTV", "EPG scan falló: $e")
+            emptyList()
+        }
+    }
 
     /**
      * Grilla bulk: trae EPG de varios canales en paralelo (de a 8) y devuelve

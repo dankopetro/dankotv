@@ -125,6 +125,16 @@ interface PlaylistDao {
     @Query("SELECT * FROM channels WHERE listName = :list ORDER BY title LIMIT :limit")
     suspend fun channelsLimited(list: String, limit: Int = 2000): List<ChannelEntity>
 
+    /**
+     * Paginado para barridos completos (grilla EPG "Todas": 78k filas no se
+     * pueden traer de una — ver comentario de channelsLimited).
+     */
+    @Query(
+        "SELECT * FROM channels WHERE listName = :list AND (:group IS NULL OR `group` = :group) " +
+            "ORDER BY title LIMIT :limit OFFSET :offset"
+    )
+    suspend fun channelsPaged(list: String, group: String?, limit: Int, offset: Int): List<ChannelEntity>
+
     @Query("SELECT COUNT(*) FROM channels WHERE listName = :list")
     suspend fun countChannels(list: String): Int
 

@@ -41,6 +41,28 @@ class TranscodeTestActivity : Activity() {
                         kotlinx.coroutines.runBlocking {
                             val ids = epg.epgStreamIds(list)
                             ShareUtils.recLog(this@TranscodeTestActivity, "SELFTEST-EPG: mapa=${ids?.size}")
+                            val group = intent.getStringExtra("group")
+                            if (!group.isNullOrEmpty()) {
+                                val g = if (group == "Todas") null else group
+                                val scope = epg.scanGroup(list, g)
+                                ShareUtils.recLog(
+                                    this@TranscodeTestActivity,
+                                    "SELFTEST-EPG: scan grupo=$group -> ${scope.size} canales",
+                                )
+                                val rows = epg.guideRows(list, scope.map { it.url })
+                                ShareUtils.recLog(
+                                    this@TranscodeTestActivity,
+                                    "SELFTEST-EPG: filas=${rows.size}",
+                                )
+                                for (r in rows.take(8)) {
+                                    val title = scope.firstOrNull { it.url == r.channelUrl }?.title
+                                    ShareUtils.recLog(
+                                        this@TranscodeTestActivity,
+                                        "SELFTEST-EPG fila: $title -> " +
+                                            r.programmes.take(2).joinToString(" | ") { it.title },
+                                    )
+                                }
+                            }
                             for (u in urls) {
                                 val (now, next) = epg.nowNext(list, u)
                                 ShareUtils.recLog(

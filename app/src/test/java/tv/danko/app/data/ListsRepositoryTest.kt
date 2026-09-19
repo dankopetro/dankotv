@@ -88,6 +88,8 @@ class FakeDao : PlaylistDao {
         channels[real] = channels[tmp] ?: mutableListOf()
         channels.remove(tmp)
     }
+    override suspend fun channelsPaged(list: String, group: String?, limit: Int, offset: Int) =
+        all(list).filter { group == null || it.group == group }.drop(offset).take(limit)
 
     // --- páginas limitadas (espejo del SQL limitado del DAO real) ---
     private fun all(list: String) = channels[list] ?: mutableListOf()
