@@ -5,7 +5,9 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import tv.danko.app.data.EpgEntry
+import tv.danko.app.data.buildEpgMap
 import tv.danko.app.data.decodeB64
+import tv.danko.app.data.filterCandidates
 import tv.danko.app.data.hasNow
 import tv.danko.app.data.pickNowNext
 import tv.danko.app.data.streamIdFromUrl
@@ -82,5 +84,30 @@ class EpgTest {
         assertTrue(hasNow(listOf(EpgEntry("X", "", now - 10, now + 10)), now))
         assertTrue(!hasNow(listOf(EpgEntry("X", "", now - 20, now - 10)), now))
         assertTrue(!hasNow(emptyList(), now))
+    }
+
+    @Test
+    fun buildEpgMapFiltraVacios() {
+        val m = buildEpgMap(listOf(1 to "a.cl", -1 to "x", 2 to "", 3 to "b.cl"))
+        assertEquals(mapOf(1 to "a.cl", 3 to "b.cl"), m)
+    }
+
+    @Test
+    fun filterCandidatesUsaElMapa() {
+        val urls = listOf(
+            "http://h/u/p/10",
+            "http://h/u/p/20",
+            "http://h/u/p/30",
+        )
+        // Con mapa: solo los que tienen guía, en orden, con tope.
+        assertEquals(
+            listOf("http://h/u/p/20", "http://h/u/p/30"),
+            filterCandidates(urls, setOf(20, 30), 60),
+        )
+        assertEquals(listOf("http://h/u/p/20"), filterCandidates(urls, setOf(20, 30), 1))
+        // Sin mapa: a ciegas con tope.
+        assertEquals(urls.take(2), filterCandidates(urls, null, 2))
+        // Mapa vacío: nadie tiene guía → nadie.
+        assertEquals(emptyList<String>(), filterCandidates(urls, emptySet(), 60))
     }
 }

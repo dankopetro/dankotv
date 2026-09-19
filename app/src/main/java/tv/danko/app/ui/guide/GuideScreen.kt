@@ -38,7 +38,7 @@ import tv.danko.app.data.db.ChannelEntity
 import tv.danko.app.ui.channels.ChannelsViewModel
 import tv.danko.app.ui.tvFocusBorder
 
-private const val MAX_CHANNELS = 40
+private const val MAX_CHANNELS = 300
 
 private val hourFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
 

@@ -155,8 +155,6 @@ class EpgRepository(
     }
 
     /** Fila de la grilla para un canal (vacía si no hay datos). */
-
-    /** Fila de la grilla para un canal (vacía si no hay datos). */
     data class GuideRow(val channelUrl: String, val programmes: List<EpgEntry>)
 
     /**
@@ -169,8 +167,21 @@ class EpgRepository(
         force: Boolean = false,
     ): List<GuideRow> = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
+        // Mapa previo: solo vale la pena consultar los que tienen guía (si no
+        // hay mapa —lista no-Xtream— se prueba a ciegas con tope chico).
+        val epgIds = try {
+            epgStreamIds(listName)
+        } catch (_: Exception) {
+            null
+        }
+        val cap = if (epgIds != null) MAX_ROWS else 40
+        val candidates = filterCandidates(channelUrls, epgIds, cap)
+        android.util.Log.i(
+            "DankoTV",
+            "EPG grilla $listName: ${channelUrls.size} urls, ${candidates.size} candidatas",
+        )
         val out = mutableListOf<GuideRow>()
-        for (chunk in channelUrls.chunked(8)) {
+        for (chunk in candidates.chunked(8)) {
             val jobs = chunk.map { url ->
                 async {
                     try {
