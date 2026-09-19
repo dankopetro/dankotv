@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,14 +87,14 @@ fun GuideScreen(
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text("← Atrás") }
+            TextButton(onClick = onBack) { Text("← Atrás", color = Color.White) }
             Text(
                 "Guía · $groupName", fontWeight = FontWeight.Bold, fontSize = 18.sp,
-                color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f),
+                color = Color.White, modifier = Modifier.weight(1f),
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             TextButton(onClick = { generation++ }, modifier = Modifier.tvFocusBorder()) {
-                Text("Recargar")
+                Text("Recargar", color = Color.White)
             }
         }
         if (loading) {
@@ -104,13 +105,13 @@ fun GuideScreen(
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     "Sin guía para este grupo (solo canales con datos aparecen acá).",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Color.White,
                 )
             }
         } else {
             Text(
                 "${rows.size} canales con programación",
-                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp,
+                color = Color.White, fontSize = 12.sp,
                 modifier = Modifier.padding(bottom = 4.dp),
             )
             LazyColumn(
@@ -145,6 +146,7 @@ private fun GuideRow(
     ) {
         Text(
             ch.title, fontWeight = FontWeight.Bold, fontSize = 14.sp,
+            color = Color.White,
             maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
         LazyRow(
@@ -168,12 +170,13 @@ private fun GuideRow(
                 ) {
                     Text(
                         p.title.ifEmpty { "(sin título)" }, fontSize = 12.sp,
+                        color = Color.White,
                         fontWeight = if (isNow) FontWeight.Bold else FontWeight.Normal,
                         maxLines = 2, overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         "${hourFmt.format(Date(p.startMs))}–${hourFmt.format(Date(p.endMs))}",
-                        fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp, color = Color.White,
                         maxLines = 1,
                     )
                 }
