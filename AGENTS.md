@@ -658,6 +658,18 @@ ordena a presentación y el encoder genera PTS limpios. Por eso anda.
 - Pendiente menor (usuario): el diálogo compartir tarda en aparecer porque
   el transcode procesa ~300+ frames (segundos). No es bug: es el costo del
   encode. Mejora posible (no hecha): toast "Procesando video…" inmediato.
+
+### 9.16 EPG (F5): lecciones 17-19/09
+- Proveedor INESTABLE por endpoints: get.php y auth pueden andar mientras
+  get_live_streams/get_short_epg dan 404/vacío (pasó 17/09 mañana y tarde).
+  El código debe degradar en silencio (tira y grilla vacías, sin carteles).
+- Títulos/descripciones Xtream en base64; start/stop_timestamp epoch (UTC,
+  sin adivinar TZ). Datos solapados y desprolijos: pick tolerante.
+- stream_id viaja en la URL M3U Xtream (último segmento) → get_short_epg
+  directo sin mapa previo. Credenciales M3U get.php se parsean (host/user).
+- Grilla: UNA llamada bulk get_live_streams → mapa id→epgId para saber QUÉ
+  consultar (probar 40 a ciegas casi nunca pega); si el bulk falla, fallback
+  ciego con tope. Solo filas con datos (auto-detección).
 ---
 
 ## 10. Proyecto viejo `/home/claudio/AndroidStudioProjects/DankoIPTV` (com.danko.iptv)
