@@ -173,9 +173,30 @@ class EpgRepository(
         try {
             val ids = epgStreamIds(listName)
             if (ids == null) {
-                val page = lists.channelsPaged(listName, group, 40, 0)
-                android.util.Log.i("DankoTV", "EPG scan $listName sin mapa: ${page.size} a ciegas")
-                return@withContext page
+                // Sin mapa (el panel no sirve get_live_streams): pre-filtro
+                // por tvg-id del M3U (gratis, sin red). Solo si no hay ningún
+                // tvg-id se prueba a ciegas (antes: solo 40 a ciegas y en
+                // "Todas" no pegaba nunca — bug 19/09).
+                val out = mutableListOf<ChannelEntity>()
+                var offset = 0
+                // Sin tope de revisados: las queries son indexadas (ms) y se
+                // corta al llenar 60 o al vaciarse (los tvg-id pueden estar
+                // al final de 78k en "Todas").
+                while (out.size < maxMatches) {
+                    val page = lists.channelsPaged(listName, group, 2000, offset)
+                    if (page.isEmpty()) break
+                    out += page.filter { it.epgId.isNotEmpty() }
+                    if (page.size < 2000) break
+                    offset += 2000
+                }
+                val res = out.take(maxMatches).ifEmpty {
+                    lists.channelsPaged(listName, group, 40, 0)
+                }
+                android.util.Log.i(
+                    "DankoTV",
+                    "EPG scan $listName grupo=${group ?: "Todas"} sin mapa: ${res.size} candidatas",
+                )
+                return@withContext res
             }
             if (ids.isEmpty()) return@withContext emptyList()
             val out = mutableListOf<ChannelEntity>()
