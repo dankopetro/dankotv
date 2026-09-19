@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -73,8 +74,21 @@ fun ChannelsScreen(
             if (ui.loading) {
                 CircularProgressIndicator(Modifier.padding(end = 8.dp))
             }
+            val ctx = LocalContext.current
             TextButton(
-                onClick = { vm.reload() },
+                onClick = {
+                    vm.reload { ok ->
+                        if (!ok) {
+                            try {
+                                android.widget.Toast.makeText(
+                                    ctx, "No se pudo recargar (revisá internet)",
+                                    android.widget.Toast.LENGTH_LONG,
+                                ).show()
+                            } catch (_: Exception) {
+                            }
+                        }
+                    }
+                },
                 enabled = !ui.loading,
                 modifier = Modifier.tvFocusBorder(),
             ) { Text("⟳") }

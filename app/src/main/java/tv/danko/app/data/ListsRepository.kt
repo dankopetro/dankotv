@@ -70,19 +70,29 @@ class ListsRepository(
         runCatching {
             when (spec) {
                 is PlaylistSpec.M3u -> {
-                    // clear ANTES de stream: si falla a mitad, la lista queda
-                    // incompleta pero sin duplicados (replaceChannels era
-                    // clear+insert todo-o-nada con la lista entera en RAM).
-                    dao.clearChannels(spec.name)
-                    val (count, groupCount, epg) = streamM3uIntoDao(spec.url, spec.name)
-                    if (count == 0) throw IllegalArgumentException("Sin canales")
-                    dao.upsertList(
-                        ListEntity(
-                            name = spec.name, type = "m3u", url = spec.url,
-                            channelCount = count, groupCount = groupCount,
-                            epgUrl = epg, updatedAt = System.currentTimeMillis(),
-                        ),
-                    )
+                    // Staging + swap atómico: si la descarga falla a mitad, la
+                    // lista anterior SIGUE intacta (antes el clear previo la
+                    // dejaba en 0 — bug 17/09 verificado en device).
+                    val staging = "${spec.name}__staging"
+                    dao.clearChannels(staging)
+                    try {
+                        val (count, groupCount, epg) = streamM3uIntoDao(spec.url, staging)
+                        if (count == 0) throw IllegalArgumentException("Sin canales")
+                        dao.swapChannels(spec.name, staging)
+                        dao.upsertList(
+                            ListEntity(
+                                name = spec.name, type = "m3u", url = spec.url,
+                                channelCount = count, groupCount = groupCount,
+                                epgUrl = epg, updatedAt = System.currentTimeMillis(),
+                            ),
+                        )
+                    } catch (e: Exception) {
+                        try {
+                            dao.clearChannels(staging)
+                        } catch (_: Exception) {
+                        }
+                        throw e
+                    }
                 }
                 is PlaylistSpec.Xtream -> {
                     val res = xtream.loadLive(spec.host, spec.user, spec.pass)

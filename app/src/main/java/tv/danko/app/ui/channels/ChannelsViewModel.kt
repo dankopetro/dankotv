@@ -116,7 +116,14 @@ class ChannelsViewModel(
         viewModelScope.launch {
             _ui.value = _ui.value.copy(loading = true)
             val spec = repo.specOf(listName)
-            val ok = if (spec == null) false else repo.loadSpec(spec).isSuccess
+            val res = if (spec == null) null else repo.loadSpec(spec)
+            val ok = res?.isSuccess == true
+            if (!ok) {
+                android.util.Log.w(
+                    "DankoTV",
+                    "reload $listName falló: ${res?.exceptionOrNull()}",
+                )
+            }
             val groups = listOf("Todas", FAV_GROUP) + repo.groups(listName)
             val group = if (_ui.value.group in groups) _ui.value.group else "Todas"
             _ui.value = _ui.value.copy(loading = false, groups = groups, group = group)

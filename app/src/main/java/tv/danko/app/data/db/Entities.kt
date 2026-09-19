@@ -81,9 +81,22 @@ interface PlaylistDao {
     @Query("DELETE FROM channels WHERE listName = :list")
     suspend fun clearChannels(list: String)
 
+    /**
+     * Swap atómico para recargas M3U (bug 17/09: el clear-antes-de-descargar
+     * dejaba la lista en 0 si la descarga fallaba). Se descarga a un nombre
+     * staging y solo al final se reemplaza: o todo nuevo o todo viejo.
+     */
+    @Query("UPDATE channels SET listName = :real WHERE listName = :tmp")
+    suspend fun renameChannels(real: String, tmp: String)
+
+    @Transaction
+    suspend fun swapChannels(real: String, tmp: String) {
+        clearChannels(real)
+        renameChannels(real, tmp)
+    }
+
     @Insert
     suspend fun insertChannels(rows: List<ChannelEntity>)
-
     /** Insert en lotes: Room/SQLite con 344k filas de una falla por binder/txn. */
     @Transaction
     suspend fun insertChannelsBatched(list: String, rows: List<ChannelEntity>) {

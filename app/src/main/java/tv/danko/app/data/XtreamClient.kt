@@ -54,6 +54,7 @@ class XtreamClient(
         @SerializedName("stream_icon") val streamIcon: String?,
         @SerializedName("category_id") val categoryId: String?,
         @SerializedName("stream_type") val streamType: String?,
+        @SerializedName("epg_channel_id") val epgChannelId: String?,
     )
 
     private data class ShortEpgResponse(val epg_listings: List<ShortEpgListing>?)
@@ -127,6 +128,24 @@ class XtreamClient(
             if (channels.isEmpty()) throw IOException("Xtream: sin canales en vivo")
             LoadResult(channels, channels.map { it.group }.toSortedSet().toList())
         }
+
+    /**
+     * Mapa stream_id → epg_channel_id (solo los que tienen EPG). UNA llamada
+     * bulk: así la grilla sabe QUÉ canales vale la pena consultar en vez de
+     * probar a ciegas los primeros 40 (casi nunca tienen guía — bug 17/09).
+     */
+    suspend fun getLiveEpgMap(
+        host: String,
+        user: String,
+        pass: String,
+    ): Map<Int, String> = withContext(Dispatchers.IO) {
+        val h = host.trimEnd('/')
+        val streams: List<Stream> = gson.fromJson(
+            get("$h/player_api.php?username=$user&password=$pass&action=get_live_streams"),
+            Array<Stream>::class.java,
+        ).toList()
+        buildEpgMap(streams.map { (it.streamId ?: -1) to (it.epgChannelId.orEmpty()) })
+    }
 
     /** EPG corto de un stream (ahora/siguiente). Títulos en base64 (estándar Xtream). */
     suspend fun getShortEpg(

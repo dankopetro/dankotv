@@ -87,6 +87,12 @@ class FakeDao2 : PlaylistDao {
         epg.removeIf { it.endMs < now }
     }
     private val epg = mutableListOf<EpgProgramme>()
+    override suspend fun renameChannels(real: String, tmp: String) {
+        channels[real] = channels[tmp] ?: mutableListOf()
+    }
+    override suspend fun swapChannels(real: String, tmp: String) {
+        channels[real] = channels[tmp] ?: mutableListOf()
+    }
 
     // --- páginas limitadas (espejo del SQL limitado del DAO real) ---
     private fun all(list: String) = channels[list] ?: mutableListOf()

@@ -61,6 +61,20 @@ fun xtreamCredsFromM3uUrl(url: String): Triple<String, String, String>? {
 fun hasNow(programmes: List<EpgEntry>, nowMs: Long): Boolean =
     programmes.any { nowMs in it.startMs until it.endMs }
 
+/** De pares (streamId, epgId) crudos al mapa (testeable JVM). */
+fun buildEpgMap(pairs: List<Pair<Int, String>>): Map<Int, String> =
+    pairs.filter { it.first >= 0 && it.second.isNotEmpty() }.toMap()
+
+/**
+ * Candidatos a consultar: si hay mapa EPG, SOLO esos (en orden); si no,
+ * los primeros [cap] a ciegas. (Testeable JVM.)
+ */
+fun filterCandidates(urls: List<String>, epgIds: Set<Int>?, cap: Int): List<String> {
+    if (epgIds == null) return urls.take(cap)
+    if (epgIds.isEmpty()) return emptyList()
+    return urls.filter { streamIdFromUrl(it) in epgIds }.take(cap)
+}
+
 /** De una lista ordenada, el programa en curso y el siguiente a [nowMs]. */fun pickNowNext(list: List<EpgEntry>, nowMs: Long): Pair<EpgEntry?, EpgEntry?> {
     val sorted = list.sortedBy { it.startMs }
     val now = sorted.firstOrNull { nowMs in it.startMs until it.endMs }
@@ -84,6 +98,33 @@ class EpgRepository(
         // 8 programas cubren ~12h aun con los solapes del proveedor (con 4
         // no se llegaba al "siguiente" — bug 17/09).
         const val LIMIT = 8
+        const val MAP_TTL_MS = 24L * 3600 * 1000
+        const val MAX_ROWS = 60
+    }
+
+    // Mapa stream_id→epgId en memoria por lista (una llamada bulk lo trae).
+    private var epgMapCache: Triple<String, Long, Map<Int, String>>? = null
+
+    /** IDs con EPG de la lista (null si no se pueden resolver credenciales). */
+    suspend fun epgStreamIds(listName: String): Set<Int>? = withContext(Dispatchers.IO) {
+        try {
+            val now = System.currentTimeMillis()
+            epgMapCache?.let { (name, at, map) ->
+                if (name == listName && now - at < MAP_TTL_MS) return@withContext map.keys
+            }
+            val spec = lists.specOf(listName) ?: return@withContext null
+            val (host, user, pass) = when (spec) {
+                is PlaylistSpec.Xtream -> Triple(spec.host, spec.user, spec.pass)
+                is PlaylistSpec.M3u -> xtreamCredsFromM3uUrl(spec.url) ?: return@withContext null
+            }
+            val map = xtream.getLiveEpgMap(host, user, pass)
+            android.util.Log.i("DankoTV", "EPG map $listName: ${map.size} con guía")
+            epgMapCache = Triple(listName, now, map)
+            map.keys
+        } catch (e: Exception) {
+            android.util.Log.w("DankoTV", "EPG map falló: $e")
+            null
+        }
     }
 
     suspend fun nowNext(listName: String, channelUrl: String): Pair<EpgEntry?, EpgEntry?> =
