@@ -192,11 +192,39 @@ fun DankoNav(
                     playQueue.set(name, list, list.indexOf(ch))
                     nav.navigate("player/${Uri.encode(ch.url)}/${Uri.encode(ch.title)}/true/")
                 },
+                onGuide = { group ->
+                    nav.navigate("guide/${Uri.encode(name)}/${Uri.encode(group)}")
+                },
                 // Navegación explícita (no popBackStack): si channels quedó como
                 // primer destino del stack, popBackStack() es no-op (bug real).
                 onBack = {
                     nav.navigate("lists") {
                         popUpTo(0) { inclusive = true } // limpia TODO el backstack
+                    }
+                },
+            )
+        }
+        composable(
+            "guide/{name}/{group}",
+            arguments = listOf(
+                navArgument("name") { type = NavType.StringType },
+                navArgument("group") { type = NavType.StringType },
+            ),
+        ) { back ->
+            val name = Uri.decode(back.arguments?.getString("name") ?: "")
+            val group = Uri.decode(back.arguments?.getString("group") ?: "")
+            tv.danko.app.ui.guide.GuideScreen(
+                listName = name,
+                groupName = group,
+                repo = container.repo,
+                epg = container.epg,
+                onPlay = { ch, list ->
+                    playQueue.set(name, list, list.indexOf(ch))
+                    nav.navigate("player/${Uri.encode(ch.url)}/${Uri.encode(ch.title)}/true/")
+                },
+                onBack = {
+                    if (!nav.popBackStack()) {
+                        nav.navigate("channels/${Uri.encode(name)}")
                     }
                 },
             )

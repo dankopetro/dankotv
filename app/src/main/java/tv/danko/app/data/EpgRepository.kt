@@ -1,6 +1,7 @@
 package tv.danko.app.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import tv.danko.app.data.db.EpgProgramme
 import tv.danko.app.data.db.PlaylistDao
@@ -56,8 +57,11 @@ fun xtreamCredsFromM3uUrl(url: String): Triple<String, String, String>? {
     }
 }
 
-/** De una lista ordenada, el programa en curso y el siguiente a [nowMs]. */
-fun pickNowNext(list: List<EpgEntry>, nowMs: Long): Pair<EpgEntry?, EpgEntry?> {
+/** ¿Alguno cubre [nowMs]? (filtro de filas con datos para la grilla). */
+fun hasNow(programmes: List<EpgEntry>, nowMs: Long): Boolean =
+    programmes.any { nowMs in it.startMs until it.endMs }
+
+/** De una lista ordenada, el programa en curso y el siguiente a [nowMs]. */fun pickNowNext(list: List<EpgEntry>, nowMs: Long): Pair<EpgEntry?, EpgEntry?> {
     val sorted = list.sortedBy { it.startMs }
     val now = sorted.firstOrNull { nowMs in it.startMs until it.endMs }
     val next = sorted.firstOrNull { it.startMs >= (now?.endMs ?: nowMs) && it != now }
@@ -77,27 +81,72 @@ class EpgRepository(
 ) {
     companion object {
         const val TTL_MS = 6L * 3600 * 1000
-        const val LIMIT = 4
+        // 8 programas cubren ~12h aun con los solapes del proveedor (con 4
+        // no se llegaba al "siguiente" — bug 17/09).
+        const val LIMIT = 8
     }
 
     suspend fun nowNext(listName: String, channelUrl: String): Pair<EpgEntry?, EpgEntry?> =
         withContext(Dispatchers.IO) {
             val now = System.currentTimeMillis()
             try {
-                val cached = dao.epgFor(listName, channelUrl, now)
-                val fresh = cached.isNotEmpty() &&
-                    cached.all { now - it.fetchedAt < TTL_MS } &&
-                    cached.any { now in it.startMs until it.endMs }
-                val entries = if (fresh) {
-                    cached.map { EpgEntry(it.title, it.desc, it.startMs, it.endMs) }
-                } else {
-                    fetchAndStore(listName, channelUrl) ?: return@withContext null to null
-                }
-                pickNowNext(entries, now)
+                pickNowNext(entriesFor(listName, channelUrl, now), now)
             } catch (_: Exception) {
                 null to null
             }
         }
+
+    /** Entradas (caché o red) para un canal. Base de nowNext y de la grilla. */
+    suspend fun entriesFor(
+        listName: String,
+        channelUrl: String,
+        nowMs: Long,
+        force: Boolean = false,
+    ): List<EpgEntry> {
+        if (!force) {
+            val cached = dao.epgFor(listName, channelUrl, nowMs)
+            val fresh = cached.isNotEmpty() &&
+                cached.all { nowMs - it.fetchedAt < TTL_MS } &&
+                cached.any { nowMs in it.startMs until it.endMs }
+            if (fresh) return cached.map { EpgEntry(it.title, it.desc, it.startMs, it.endMs) }
+        }
+        return fetchAndStore(listName, channelUrl) ?: emptyList()
+    }
+
+    /** Fila de la grilla para un canal (vacía si no hay datos). */
+
+    /** Fila de la grilla para un canal (vacía si no hay datos). */
+    data class GuideRow(val channelUrl: String, val programmes: List<EpgEntry>)
+
+    /**
+     * Grilla bulk: trae EPG de varios canales en paralelo (de a 8) y devuelve
+     * SOLO los que tienen datos (auto-detección pedida por el usuario).
+     */
+    suspend fun guideRows(
+        listName: String,
+        channelUrls: List<String>,
+        force: Boolean = false,
+    ): List<GuideRow> = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val out = mutableListOf<GuideRow>()
+        for (chunk in channelUrls.chunked(8)) {
+            val jobs = chunk.map { url ->
+                async {
+                    try {
+                        url to entriesFor(listName, url, now, force)
+                    } catch (_: Exception) {
+                        url to emptyList()
+                    }
+                }
+            }
+            for ((url, entries) in jobs.map { it.await() }) {
+                if (hasNow(entries, now)) {
+                    out.add(GuideRow(url, entries.sortedBy { it.startMs }))
+                }
+            }
+        }
+        out
+    }
 
     private suspend fun fetchAndStore(listName: String, channelUrl: String): List<EpgEntry>? {
         val spec = lists.specOf(listName) ?: return null

@@ -186,7 +186,7 @@ interface PlaylistDao {
 
     @Query(
         "SELECT * FROM epg_programmes WHERE listName = :list AND channelUrl = :url " +
-            "AND endMs > :now ORDER BY startMs LIMIT 8"
+            "AND endMs > :now ORDER BY startMs LIMIT 12"
     )
     suspend fun epgFor(list: String, url: String, now: Long): List<EpgProgramme>
 

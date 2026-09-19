@@ -43,6 +43,7 @@ fun ChannelsScreen(
     skin: String,
     onSkin: (String) -> Unit,
     onPlay: (ChannelEntity, List<ChannelEntity>) -> Unit,
+    onGuide: (String) -> Unit = {},
     onBack: () -> Unit,
 ) {
     val ui by vm.ui.collectAsState()
@@ -77,6 +78,10 @@ fun ChannelsScreen(
                 enabled = !ui.loading,
                 modifier = Modifier.tvFocusBorder(),
             ) { Text("⟳") }
+            TextButton(
+                onClick = { onGuide(ui.group) },
+                modifier = Modifier.tvFocusBorder(),
+            ) { Text("Guía") }
             SkinMenuButton(current = skin, onSelect = onSkin)
         }
         OutlinedTextField(
@@ -132,12 +137,16 @@ private fun ChannelRow(
         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    if (fav) "★ ${ch.title}" else ch.title,
+                    ch.title,
                     fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
                 )
                 Text(ch.group, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
             }
-            IconButton(onClick = onFav) { Text(if (fav) "★" else "☆", color = MaterialTheme.colorScheme.primary) }
+            // Estrella dibujada (el glifo ★/☆ no renderiza en algunos
+            // teléfonos — mismo caso que el botón fav del player).
+            IconButton(onClick = onFav) {
+                tv.danko.app.ui.StarIcon(fav, tint = MaterialTheme.colorScheme.primary)
+            }
         }
     }
 }

@@ -2,9 +2,11 @@ package tv.danko.app.ui.player
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import tv.danko.app.data.EpgEntry
 import tv.danko.app.data.decodeB64
+import tv.danko.app.data.hasNow
 import tv.danko.app.data.pickNowNext
 import tv.danko.app.data.streamIdFromUrl
 import tv.danko.app.data.xtreamCredsFromM3uUrl
@@ -66,12 +68,19 @@ class EpgTest {
     }
 
     @Test
-    fun pickNowNextToleraSolapesDelProveedor() {
-        // El proveedor manda rangos solapados: gana el primero que cubre ahora.
+    fun pickNowNextToleraSolapesDelProveedor() {        // El proveedor manda rangos solapados: gana el primero que cubre ahora.
         val now = 1_000_000L
         val a = EpgEntry("A", "", now - 100_000, now + 500_000)
         val b = EpgEntry("B", "", now - 50_000, now + 100_000)
         val (n, _) = pickNowNext(listOf(a, b), now)
         assertEquals("A", n?.title)
+    }
+
+    @Test
+    fun hasNowDetectaFilasConDatos() {
+        val now = 1_000_000L
+        assertTrue(hasNow(listOf(EpgEntry("X", "", now - 10, now + 10)), now))
+        assertTrue(!hasNow(listOf(EpgEntry("X", "", now - 20, now - 10)), now))
+        assertTrue(!hasNow(emptyList(), now))
     }
 }
