@@ -670,6 +670,12 @@ ordena a presentación y el encoder genera PTS limpios. Por eso anda.
 - Grilla: UNA llamada bulk get_live_streams → mapa id→epgId para saber QUÉ
   consultar (probar 40 a ciegas casi nunca pega); si el bulk falla, fallback
   ciego con tope. Solo filas con datos (auto-detección).
+- EPG por proveedor (verificado 19/09): superxlatino/Naty2 SÍ tenía datos
+  (tira probada OK); redworld/cutisaca (reemplazo de dddd), Premium,
+  Planet y Patricia NO tienen nada (short_epg vacío, xmltv 0 bytes,
+  get_live_streams 404 o ids decorativos). La grilla/tira quedan vacías
+  PORQUE NO HAY DATOS, no por bug — el pipeline está probado con datos
+  reales (self-test EPG: 40 filas). Si aparece una lista con EPG, anda solo.
 ---
 
 ## 10. Proyecto viejo `/home/claudio/AndroidStudioProjects/DankoIPTV` (com.danko.iptv)
