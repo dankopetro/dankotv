@@ -8,7 +8,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 /** v1: listas + canales + favoritos; v3: + programas EPG (F5). */
 @Database(
     entities = [ListEntity::class, ChannelEntity::class, FavoriteEntity::class, EpgProgramme::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -38,5 +38,15 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
             "CREATE INDEX IF NOT EXISTS `index_epg_programmes_listName_channelUrl_startMs` " +
                 "ON `epg_programmes` (`listName`, `channelUrl`, `startMs`)",
         )
+    }
+}
+
+/**
+ * v3→v4: purga del caché EPG (las filas viejas traen horas SIN corregir;
+ * desde v4 getShortEpg aplica +3h — ver EPG_TZ_SHIFT_MS).
+ */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("DELETE FROM `epg_programmes`")
     }
 }

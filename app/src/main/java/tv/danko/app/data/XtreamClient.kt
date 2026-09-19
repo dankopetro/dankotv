@@ -27,6 +27,16 @@ class XtreamClient(
         .readTimeout(120, TimeUnit.SECONDS)
         .build()
 
+    /**
+     * Cliente corto para APIs chicas (EPG): el default de 120s es para
+     * playlists gigantes; un endpoint colgado no puede frenar la grilla
+     * 6 minutos por canal (bug 19/09).
+     */
+    private val apiHttp: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .build()
+
     companion object {
         /**
          * UA SOLO para descargar playlists/EPG (get.php, player_api.php). Los
@@ -40,6 +50,8 @@ class XtreamClient(
          */
         const val UA = "Mozilla/5.0"
         const val CATCH_ALL = "xEverythingElse"
+        /** Corrección horaria EPG, ver getShortEpg. */
+        const val EPG_TZ_SHIFT_MS = 3L * 3600 * 1000
     }
 
     private data class AuthResponse(val user_info: UserInfo?)
@@ -65,12 +77,29 @@ class XtreamClient(
         @SerializedName("stop_timestamp") val stopTs: String?,
     )
 
-    private fun get(url: String, retries: Int = 3): String {
+    private fun get(url: String, retries: Int = 3, readSecs: Long = 120): String {
         var last: IOException? = null
         repeat(retries) {
             try {
                 val req = Request.Builder().url(url).header("User-Agent", UA).build()
                 http.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}")
+                    return resp.body!!.string()
+                }
+            } catch (e: IOException) {
+                last = e
+            }
+        }
+        throw last ?: IOException("request failed: $url")
+    }
+
+    /** GET corto (APIs EPG): 2 intentos, 15s de lectura. */
+    private fun getApi(url: String, retries: Int = 2): String {
+        var last: IOException? = null
+        repeat(retries) {
+            try {
+                val req = Request.Builder().url(url).header("User-Agent", UA).build()
+                apiHttp.newCall(req).execute().use { resp ->
                     if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}")
                     return resp.body!!.string()
                 }
@@ -141,13 +170,18 @@ class XtreamClient(
     ): Map<Int, String> = withContext(Dispatchers.IO) {
         val h = host.trimEnd('/')
         val streams: List<Stream> = gson.fromJson(
-            get("$h/player_api.php?username=$user&password=$pass&action=get_live_streams"),
+            getApi("$h/player_api.php?username=$user&password=$pass&action=get_live_streams"),
             Array<Stream>::class.java,
         ).toList()
         buildEpgMap(streams.map { (it.streamId ?: -1) to (it.epgChannelId.orEmpty()) })
     }
 
-    /** EPG corto de un stream (ahora/siguiente). Títulos en base64 (estándar Xtream). */
+    /**
+     * EPG corto de un stream (ahora/siguiente). Títulos en base64 (estándar Xtream).
+     * EPG_TZ_SHIFT_MS: estos paneles etiquetan hora local (UTC-3 Argentina)
+     * como si fuera UTC → todo llega 3h temprano (verificado 19/09: River
+     * 15:45 vs transmisión real 18:45). Se corrige acá una sola vez.
+     */
     suspend fun getShortEpg(
         host: String,
         user: String,
@@ -156,14 +190,16 @@ class XtreamClient(
         limit: Int = 4,
     ): List<EpgEntry> = withContext(Dispatchers.IO) {
         val h = host.trimEnd('/')
-        val json = get(
+        val json = getApi(
             "$h/player_api.php?username=$user&password=$pass" +
                 "&action=get_short_epg&stream_id=$streamId&limit=$limit",
         )
         val resp = gson.fromJson(json, ShortEpgResponse::class.java)
         (resp.epg_listings ?: emptyList()).mapNotNull {
-            val startMs = it.startTs?.toLongOrNull()?.times(1000) ?: return@mapNotNull null
-            val endMs = it.stopTs?.toLongOrNull()?.times(1000) ?: return@mapNotNull null
+            val startMs = it.startTs?.toLongOrNull()?.times(1000)?.plus(EPG_TZ_SHIFT_MS)
+                ?: return@mapNotNull null
+            val endMs = it.stopTs?.toLongOrNull()?.times(1000)?.plus(EPG_TZ_SHIFT_MS)
+                ?: return@mapNotNull null
             EpgEntry(decodeB64(it.title), decodeB64(it.description), startMs, endMs)
         }
     }

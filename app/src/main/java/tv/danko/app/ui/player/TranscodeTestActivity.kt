@@ -34,6 +34,7 @@ class TranscodeTestActivity : Activity() {
                     ).addMigrations(
                         tv.danko.app.data.db.MIGRATION_1_2,
                         tv.danko.app.data.db.MIGRATION_2_3,
+                        tv.danko.app.data.db.MIGRATION_3_4,
                     ).build()
                     try {
                         val lists = tv.danko.app.data.ListsRepository(db.playlists(), tv.danko.app.data.SettingsStore.create(this))
