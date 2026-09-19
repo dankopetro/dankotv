@@ -30,6 +30,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.style.TextOverflow
+import tv.danko.app.data.EpgRepository
 import androidx.compose.material3.Button
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -82,6 +84,7 @@ fun PlayerScreen(
     isLive: Boolean,
     userAgent: String? = null,
     queue: PlayQueue? = null,
+    epg: EpgRepository? = null,
     onClose: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
@@ -103,8 +106,23 @@ fun PlayerScreen(
     var volume by remember { mutableStateOf(100f) }
     var fullscreen by remember { mutableStateOf(false) }
     var fav by remember { mutableStateOf(false) }
+    // EPG ahora/siguiente (F5): se carga por canal, con caché Room 6h.
+    var epgNow by remember { mutableStateOf<String?>(null) }
+    var epgNext by remember { mutableStateOf<String?>(null) }
     var curTitle by remember { mutableStateOf(title) }
     var curUrl by remember { mutableStateOf(url) }
+    LaunchedEffect(curUrl) {
+        epgNow = null
+        epgNext = null
+        try {
+            val repo = epg ?: return@LaunchedEffect
+            val list = queue?.listName?.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
+            val (now, next) = repo.nowNext(list, curUrl)
+            epgNow = now?.title?.takeIf { it.isNotEmpty() }
+            epgNext = next?.title?.takeIf { it.isNotEmpty() }
+        } catch (_: Exception) {
+        }
+    }
     // Zoom estilo VLC (SOLO landscape no-TV, ver abajo): factor 1 = ajustar,
     // >1 = llenar recortando. El pan va en unidades mpv [-1, 1].
     var zoomFactor by remember { mutableStateOf(1f) }
@@ -504,6 +522,21 @@ fun PlayerScreen(
                         ),
                 )
                 Box(Modifier.weight(1f).fillMaxWidth())
+                // EPG ahora/siguiente (TV y teléfono): solo si hay datos.
+                if (epgNow != null || epgNext != null) {
+                    Text(
+                        buildString {
+                            epgNow?.let { append("Ahora: $it") }
+                            if (epgNow != null && epgNext != null) append("  ·  ")
+                            epgNext?.let { append("Después: $it") }
+                        },
+                        color = DankoMuted,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                }
                 Column(
                     Modifier.fillMaxWidth()
                         .background(Color.Black.copy(alpha = 0.6f))

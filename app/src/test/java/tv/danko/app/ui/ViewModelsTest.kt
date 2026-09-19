@@ -22,6 +22,7 @@ import org.junit.Test
 import tv.danko.app.data.ListsRepository
 import tv.danko.app.data.SettingsStore
 import tv.danko.app.data.db.ChannelEntity
+import tv.danko.app.data.db.EpgProgramme
 import tv.danko.app.data.db.FavoriteEntity
 import tv.danko.app.data.db.ListEntity
 import tv.danko.app.data.db.PlaylistDao
@@ -70,6 +71,22 @@ class FakeDao2 : PlaylistDao {
     override suspend fun clearFavorites(list: String) {
         favs.removeIf { it.first == list }
     }
+    override suspend fun epgFor(list: String, url: String, now: Long) =
+        epg.filter { it.listName == list && it.channelUrl == url && it.endMs > now }
+    override suspend fun replaceEpg(list: String, url: String, rows: List<EpgProgramme>) {
+        epg.removeIf { it.listName == list && it.channelUrl == url }
+        epg.addAll(rows)
+    }
+    override suspend fun deleteEpg(list: String, url: String) {
+        epg.removeIf { it.listName == list && it.channelUrl == url }
+    }
+    override suspend fun insertEpg(rows: List<EpgProgramme>) {
+        epg.addAll(rows)
+    }
+    override suspend fun pruneEpg(now: Long) {
+        epg.removeIf { it.endMs < now }
+    }
+    private val epg = mutableListOf<EpgProgramme>()
 
     // --- páginas limitadas (espejo del SQL limitado del DAO real) ---
     private fun all(list: String) = channels[list] ?: mutableListOf()

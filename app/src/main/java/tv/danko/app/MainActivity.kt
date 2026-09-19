@@ -216,6 +216,7 @@ fun DankoNav(
                 isLive = back.arguments?.getBoolean("live") ?: true,
                 userAgent = Uri.decode(back.arguments?.getString("ua") ?: "").ifEmpty { null },
                 queue = playQueue,
+                epg = container.epg,
                 onClose = {
                     // Si el player fue el destino inicial (smoke test por intent),
                     // popBackStack no tiene a dónde volver → ir a lists.

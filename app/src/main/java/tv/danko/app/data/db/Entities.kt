@@ -51,6 +51,22 @@ data class ChannelEntity(
 )
 data class FavoriteEntity(val listName: String, val url: String)
 
+/** Programas EPG cacheados por canal (F5). startMs/endMs = epoch UTC. */
+@Entity(
+    tableName = "epg_programmes",
+    indices = [Index(value = ["listName", "channelUrl", "startMs"])],
+)
+data class EpgProgramme(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val listName: String,
+    val channelUrl: String,
+    val startMs: Long,
+    val endMs: Long,
+    val title: String = "",
+    val desc: String = "",
+    val fetchedAt: Long = 0L,
+)
+
 @Dao
 interface PlaylistDao {
     @Query("SELECT * FROM lists ORDER BY updatedAt DESC")
@@ -167,6 +183,27 @@ interface PlaylistDao {
 
     @Query("DELETE FROM favorites WHERE listName = :list")
     suspend fun clearFavorites(list: String)
+
+    @Query(
+        "SELECT * FROM epg_programmes WHERE listName = :list AND channelUrl = :url " +
+            "AND endMs > :now ORDER BY startMs LIMIT 8"
+    )
+    suspend fun epgFor(list: String, url: String, now: Long): List<EpgProgramme>
+
+    @Transaction
+    suspend fun replaceEpg(list: String, url: String, rows: List<EpgProgramme>) {
+        deleteEpg(list, url)
+        insertEpg(rows)
+    }
+
+    @Query("DELETE FROM epg_programmes WHERE listName = :list AND channelUrl = :url")
+    suspend fun deleteEpg(list: String, url: String)
+
+    @Insert
+    suspend fun insertEpg(rows: List<EpgProgramme>)
+
+    @Query("DELETE FROM epg_programmes WHERE endMs < :now")
+    suspend fun pruneEpg(now: Long)
 }
 
 fun String.escapeLike(): String {

@@ -308,25 +308,20 @@ en recomposición NO está soportado), AppContainer (sin helpers extra), TvFocus
 skin), ListsRepository (`specOf()` reconstruye spec para reload). Tests: 24 JVM verdes
 (nuevos: FAV_GROUP filtra, reload baja de nuevo del server, last_group persiste).
 
-### 8.4 Roadmap actualizado (decidido con el usuario 16/09 noche: EPG primero)
-Comparativa completa Linux-vs-Android en la sesión del 16/09: lo que falta se
-ataca en este orden. F4 ya ENTREGADA (F4-rec v2 + foto + iconos dibujados).
-- **F5 EPG + catchup** (PRÓXIMO): tablas Room nuevas (auto-migración,
-  exportSchema ya activo), WorkManager para refrescar en fondo (XMLTV/JTV
-  como el motor: epg.py/epg_xmltv.py/epg_jtv.py/multi_epg.py de referencia),
-  guía ahora/siguiente + catchup con URLs por duración (catchup.py Linux).
-  Desbloquea a futuro la grabación programada.
-- **F6 VOD + series Xtream**: el cliente hoy trae solo TV en vivo (marcado
-  "fase posterior" en XtreamClient); agregar películas/series.
-- **F7 Logos + editor de listas**: mostrar logos (hoy se parsean pero no hay
-  loader de imágenes) + editar/renombrar/reordenar listas y ocultar canales.
-- **F8 resto**: Cast (F5 viejo: CastOptionsProvider del proyecto viejo, una
-  sola vía; StreamProxy NO se reusa tal cual — reescribir con token LAN),
-  selector de pistas audio/subtítulos, timeshift real, sleep timer, PIN
-  parental, PiP, i18n (el motor tiene po/), grabación en TV, MediaSession
-  (equivale al MPRIS de Linux), límite de conexiones del proveedor.
+### 8.4 Roadmap actualizado (decidido con el usuario 16/09 noche + 17/09 mañana)
+Veredicto de conveniencia 17/09 con DATOS del proveedor (cuenta Naty2:
+9.873 VOD, 2.220 series, EPG parcial —82/1970 con ID + XMLTV para match por
+nombre, títulos base64—, logos en 99.9% de canales, 0 canales con catchup,
+máx 3 conexiones). Comparativa completa Linux-vs-Android hecha el 16/09.
+- **F5 EPG** (EN CURSO 17/09): guía en TV + tira ahora/siguiente en teléfono.
+  Catchup NO se hace (el proveedor tiene 0 canales con archivo).
+- **F6 VOD + series** (con selector audio/subs incluido).
+- **F7 Logos + editor + aviso de conexiones + MediaSession + sleep**.
+- **F8 Grabación en TV** (con lista "Mis grabaciones") + **Cast SOLO teléfono**
+  (caso invitado: castear a TV ajena en la misma red; la TCL ya tiene la app,
+  no se justifica en TV). Timeshift en espera (complejo, solo si se pide).
 - **F9 release**: signingConfig release (keystore del usuario), App Bundle,
-  GitHub Release (repo del usuario), licencia GPL-3.0 + oferta de fuentes.
+  GitHub Release. DESCARTADOS 17/09: catchup, i18n, PIN parental.
 
 ---
 

@@ -56,6 +56,14 @@ class XtreamClient(
         @SerializedName("stream_type") val streamType: String?,
     )
 
+    private data class ShortEpgResponse(val epg_listings: List<ShortEpgListing>?)
+    private data class ShortEpgListing(
+        val title: String?,
+        val description: String?,
+        @SerializedName("start_timestamp") val startTs: String?,
+        @SerializedName("stop_timestamp") val stopTs: String?,
+    )
+
     private fun get(url: String, retries: Int = 3): String {
         var last: IOException? = null
         repeat(retries) {
@@ -119,4 +127,25 @@ class XtreamClient(
             if (channels.isEmpty()) throw IOException("Xtream: sin canales en vivo")
             LoadResult(channels, channels.map { it.group }.toSortedSet().toList())
         }
+
+    /** EPG corto de un stream (ahora/siguiente). Títulos en base64 (estándar Xtream). */
+    suspend fun getShortEpg(
+        host: String,
+        user: String,
+        pass: String,
+        streamId: Int,
+        limit: Int = 4,
+    ): List<EpgEntry> = withContext(Dispatchers.IO) {
+        val h = host.trimEnd('/')
+        val json = get(
+            "$h/player_api.php?username=$user&password=$pass" +
+                "&action=get_short_epg&stream_id=$streamId&limit=$limit",
+        )
+        val resp = gson.fromJson(json, ShortEpgResponse::class.java)
+        (resp.epg_listings ?: emptyList()).mapNotNull {
+            val startMs = it.startTs?.toLongOrNull()?.times(1000) ?: return@mapNotNull null
+            val endMs = it.stopTs?.toLongOrNull()?.times(1000) ?: return@mapNotNull null
+            EpgEntry(decodeB64(it.title), decodeB64(it.description), startMs, endMs)
+        }
+    }
 }
