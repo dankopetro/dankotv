@@ -522,8 +522,11 @@ class SeamlessPlayer(
         return m
     }
 
-    /** Pistas (id, etiqueta) de un tipo mpv ("audio"/"sub"). Vacío si no hay. */
+    /** Pistas (id, etiqueta) de un tipo ("audio"/"subtitle"). Vacío si no hay. */
     fun mediaTracks(kind: String): List<Pair<String, String>> {
+        // OJO: mpv llama "sub" al tipo subtítulo (no "subtitle") — filtrar
+        // por "subtitle" descartaba TODO y el botón SUB nunca salía (bug 21/09).
+        val want = if (kind == "subtitle") "sub" else kind
         return try {
             val node = mpv.getPropertyNode("track-list") as? MPVNode.ArrayNode
                 ?: return emptyList()
@@ -531,7 +534,7 @@ class SeamlessPlayer(
             val out = node.value.mapNotNull { item ->
                 val map = (item as? MPVNode.MapNode)?.value ?: return@mapNotNull null
                 val type = (map["type"] as? MPVNode.StringNode)?.value ?: return@mapNotNull null
-                if (type != kind) return@mapNotNull null
+                if (type != want) return@mapNotNull null
                 n += 1
                 val id = when (val v = map["id"]) {
                     is MPVNode.IntNode -> v.value.toString()
