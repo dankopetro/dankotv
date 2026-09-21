@@ -488,6 +488,99 @@ fun PlayerScreen(
         }
     }
 
+    // MediaSession F7 (TV + teléfono): control remoto, auriculares BT y
+    // centro multimedia mandan play/pausa/stop. Sin dependencias: plataforma.
+    val mediaSession = remember {
+        try {
+            android.media.session.MediaSession(ctx, "DankoTV").apply {
+                setFlags(
+                    android.media.session.MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or
+                        android.media.session.MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS,
+                )
+                setCallback(object : android.media.session.MediaSession.Callback() {
+                    override fun onPlay() {
+                        player.setPaused(false)
+                        scope.launch { paused = false }
+                    }
+                    override fun onPause() {
+                        player.setPaused(true)
+                        scope.launch { paused = true }
+                    }
+                    override fun onStop() {
+                        scope.launch { closePlayer() }
+                    }
+                    override fun onMediaButtonEvent(intent: android.content.Intent): Boolean {
+                        val ev = intent.getParcelableExtra(
+                            android.content.Intent.EXTRA_KEY_EVENT,
+                        ) as? android.view.KeyEvent
+                        when (ev?.keyCode) {
+                            android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                                val p = player.togglePause()
+                                scope.launch { paused = p }
+                                return true
+                            }
+                            android.view.KeyEvent.KEYCODE_MEDIA_PLAY -> {
+                                player.setPaused(false)
+                                scope.launch { paused = false }
+                                return true
+                            }
+                            android.view.KeyEvent.KEYCODE_MEDIA_PAUSE,
+                            android.view.KeyEvent.KEYCODE_MEDIA_STOP,
+                            -> {
+                                player.setPaused(true)
+                                scope.launch { paused = true }
+                                return true
+                            }
+                        }
+                        return super.onMediaButtonEvent(intent)
+                    }
+                })
+                isActive = true
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+    // Estado + título publicados a la sesión (pausa/controles del sistema).
+    LaunchedEffect(state, paused, curTitle) {
+        val ms = mediaSession ?: return@LaunchedEffect
+        try {
+            ms.setMetadata(
+                android.media.MediaMetadata.Builder()
+                    .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, curTitle)
+                    .build(),
+            )
+            val st = if (state is PlayerState.Playing && !paused) {
+                android.media.session.PlaybackState.STATE_PLAYING
+            } else {
+                android.media.session.PlaybackState.STATE_PAUSED
+            }
+            ms.setPlaybackState(
+                android.media.session.PlaybackState.Builder()
+                    .setState(st, android.media.session.PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f)
+                    .setActions(
+                        android.media.session.PlaybackState.ACTION_PLAY or
+                            android.media.session.PlaybackState.ACTION_PAUSE or
+                            android.media.session.PlaybackState.ACTION_STOP,
+                    )
+                    .build(),
+            )
+        } catch (_: Exception) {
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                mediaSession?.isActive = false
+            } catch (_: Exception) {
+            }
+            try {
+                mediaSession?.release()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
     val label = when (val s = state) {
         PlayerState.Idle -> "Detenido"
         PlayerState.Loading -> "Cargando…"

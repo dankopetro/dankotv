@@ -366,6 +366,16 @@ class SeamlessPlayer(
         return p
     }
 
+    /** Pausa explícita sin preguntar estado (MediaSession/botones físicos). */
+    fun setPaused(p: Boolean) {
+        try {
+            if ((mpv.getPropertyBoolean("pause") ?: false) != p) {
+                mpv.setPropertyBoolean("pause", p)
+            }
+        } catch (_: Exception) {
+        }
+    }
+
     fun setVolume(v: Int) {
         try {
             mpv.setPropertyDouble("volume", v.coerceIn(0, 100).toDouble())
