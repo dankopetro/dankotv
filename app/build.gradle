@@ -14,7 +14,7 @@ android {
         applicationId "tv.danko.app"
         minSdk 26
         targetSdk 36
-        versionCode 42
+        versionCode 43
         versionName "0.1-f5"
         // TV = armeabi-v7a (32 bits! rtd284x con userspace de 32b) +
         // teléfono = arm64-v8a. Sin x86 (emulador). El APK traía 4 ABIs
@@ -63,6 +63,8 @@ dependencies {
     implementation libs.kotlinx.coroutines.android
     implementation libs.gson
     implementation libs.coil.compose
+    implementation libs.cast.framework
+    implementation libs.mediarouter
     // F2 player: libmpv embebido (mismo motor que Linux)
     implementation libs.mpv.android.lib
     // F3 UI: navegación + ViewModels

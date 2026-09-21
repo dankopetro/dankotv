@@ -568,6 +568,90 @@ fun PlayerScreen(
         } catch (_: Exception) {
         }
     }
+    // Cast (F8, solo teléfono): al conectar pasa lo actual al TV y pausa
+    // local; al soltar, retoma local. Tipo MIME por extensión.
+    if (!isTv) {
+        DisposableEffect(curUrl, curTitle, isLive) {
+            var manager: com.google.android.gms.cast.framework.SessionManager? = null
+            val listener =
+                object : com.google.android.gms.cast.framework.SessionManagerListener<com.google.android.gms.cast.framework.Session> {
+                    override fun onSessionStarted(
+                        session: com.google.android.gms.cast.framework.Session,
+                        sessionId: String,
+                    ) {
+                        val cast = session as? com.google.android.gms.cast.framework.CastSession
+                            ?: return
+                        try {
+                            if (state !is PlayerState.Playing) return
+                            player.setPaused(true)
+                            scope.launch { paused = true }
+                            val lower = curUrl.lowercase()
+                            val mime = when {
+                                lower.contains(".m3u8") -> "application/x-mpegurl"
+                                lower.endsWith(".mp4") -> "video/mp4"
+                                lower.endsWith(".mkv") -> "video/x-matroska"
+                                lower.endsWith(".ts") -> "video/mp2t"
+                                isLive -> "video/mp2t"
+                                else -> "video/mp4"
+                            }
+                            val meta = com.google.android.gms.cast.MediaMetadata(
+                                if (isLive) {
+                                    com.google.android.gms.cast.MediaMetadata.MEDIA_TYPE_TV_SHOW
+                                } else {
+                                    com.google.android.gms.cast.MediaMetadata.MEDIA_TYPE_MOVIE
+                                },
+                            )
+                            meta.putString(
+                                com.google.android.gms.cast.MediaMetadata.KEY_TITLE, curTitle,
+                            )
+                            val info = com.google.android.gms.cast.MediaInfo.Builder(curUrl)
+                                .setStreamType(
+                                    if (isLive) {
+                                        com.google.android.gms.cast.MediaInfo.STREAM_TYPE_LIVE
+                                    } else {
+                                        com.google.android.gms.cast.MediaInfo.STREAM_TYPE_BUFFERED
+                                    },
+                                )
+                                .setContentType(mime)
+                                .setMetadata(meta)
+                                .build()
+                            cast.remoteMediaClient?.load(info, true, 0)
+                        } catch (_: Exception) {
+                        }
+                    }
+                    override fun onSessionEnded(
+                        session: com.google.android.gms.cast.framework.Session,
+                        error: Int,
+                    ) {
+                        try {
+                            player.setPaused(false)
+                            scope.launch { paused = false }
+                        } catch (_: Exception) {
+                        }
+                    }
+                    override fun onSessionStarting(session: com.google.android.gms.cast.framework.Session) {}
+                    override fun onSessionStartFailed(session: com.google.android.gms.cast.framework.Session, error: Int) {}
+                    override fun onSessionEnding(session: com.google.android.gms.cast.framework.Session) {}
+                    override fun onSessionResuming(session: com.google.android.gms.cast.framework.Session, sessionId: String) {}
+                    override fun onSessionResumed(session: com.google.android.gms.cast.framework.Session, wasSuspended: Boolean) {}
+                    override fun onSessionResumeFailed(session: com.google.android.gms.cast.framework.Session, error: Int) {}
+                    override fun onSessionSuspended(session: com.google.android.gms.cast.framework.Session, reason: Int) {}
+                }
+            try {
+                manager = com.google.android.gms.cast.framework.CastContext
+                    .getSharedInstance(ctx).sessionManager
+                manager?.addSessionManagerListener(listener)
+            } catch (_: Exception) {
+                manager = null
+            }
+            onDispose {
+                try {
+                    manager?.removeSessionManagerListener(listener)
+                } catch (_: Exception) {
+                }
+            }
+        }
+    }
     DisposableEffect(Unit) {
         onDispose {
             try {
@@ -799,6 +883,18 @@ fun PlayerScreen(
                                     modifier = Modifier.tvFocusBorder().then(ctlMod),
                                     contentPadding = ctlPad,
                                 ) { PhotoIcon() }
+                            }
+                            // Cast solo-teléfono (F8, caso invitado): al conectar
+                            // pasa lo actual al TV y pausa local; al soltar,
+                            // retoma local. Botón de ruta del sistema.
+                            item {
+                                androidx.compose.ui.viewinterop.AndroidView(
+                                    factory = { c ->
+                                        androidx.mediarouter.app.MediaRouteButton(c)
+                                    },
+                                    modifier = Modifier.tvFocusBorder()
+                                        .then(if (isLandscape) Modifier.size(32.dp) else Modifier.size(40.dp)),
+                                )
                             }
                         }
                         if (hasQueue) {
