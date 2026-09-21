@@ -106,9 +106,22 @@ fun ChannelsScreen(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
+        // La fila scrollea sola al grupo actual (si no, el seleccionado
+        // queda fuera de pantalla y no se sabe dónde se está — bug 21/09).
+        val chipsState = androidx.compose.foundation.lazy.rememberLazyListState()
+        LaunchedEffect(ui.group, ui.groups) {
+            val i = ui.groups.indexOf(ui.group)
+            if (i >= 0) {
+                try {
+                    chipsState.scrollToItem(i)
+                } catch (_: Exception) {
+                }
+            }
+        }
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            state = chipsState,
         ) {
             items(ui.groups) { g ->
                 FilterChip(
@@ -116,11 +129,13 @@ fun ChannelsScreen(
                     onClick = { vm.setGroup(g) },
                     label = { Text(g, maxLines = 1) },
                     // Seleccionado BIEN visible en TV (el default con este
-                    // tema casi no se distingue — bug 21/09).
+                    // tema casi no se distingue — bug 21/09) + borde de foco
+                    // (sin esto no se ve por dónde va el D-pad).
                     colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
                         selectedContainerColor = MaterialTheme.colorScheme.primary,
                         selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
                     ),
+                    modifier = Modifier.tvFocusBorder(),
                 )
             }
         }
@@ -158,7 +173,7 @@ private fun ChannelRow(
     hideLabel: String,
     modifier: Modifier = Modifier,
 ) {
-    Card(modifier.fillMaxWidth().tvFocusBorder()) {
+    Card(modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             // Logo del canal (F7): Coil con caché; sin logo no ocupa lugar.
             if (ch.logo.isNotEmpty()) {
