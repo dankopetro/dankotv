@@ -117,6 +117,22 @@ fun PlayerScreen(
         mutableStateOf<List<androidx.mediarouter.media.MediaRouter.RouteInfo>>(emptyList())
     }
     var castActive by remember { mutableStateOf(false) }
+    fun refreshCastRoutes() {
+        try {
+            val router = androidx.mediarouter.media.MediaRouter.getInstance(ctx)
+            val cat = com.google.android.gms.cast.CastMediaControlIntent
+                .categoryForCast("CC1AD845")
+            castRoutes = router.routes.filter {
+                try {
+                    it.isEnabled && it.supportsControlCategory(cat)
+                } catch (_: Exception) {
+                    false
+                }
+            }
+        } catch (_: Exception) {
+            castRoutes = emptyList()
+        }
+    }
     // El descubrimiento mDNS es ASÍNCRONO: una foto al abrir no alcanza
     // (bug 21/09: "no hay nada en la red" con la TV anunciando). Callback
     // vivo mientras el diálogo está abierto.
@@ -126,16 +142,16 @@ fun PlayerScreen(
                 refreshCastRoutes()
             }
             override fun onRouteAdded(
-                router: androidx.mediarouter.media.MediaRouter?,
-                route: androidx.mediarouter.media.MediaRouter.RouteInfo?,
+                router: androidx.mediarouter.media.MediaRouter,
+                route: androidx.mediarouter.media.MediaRouter.RouteInfo,
             ) = sync()
             override fun onRouteRemoved(
-                router: androidx.mediarouter.media.MediaRouter?,
-                route: androidx.mediarouter.media.MediaRouter.RouteInfo?,
+                router: androidx.mediarouter.media.MediaRouter,
+                route: androidx.mediarouter.media.MediaRouter.RouteInfo,
             ) = sync()
             override fun onRouteChanged(
-                router: androidx.mediarouter.media.MediaRouter?,
-                route: androidx.mediarouter.media.MediaRouter.RouteInfo?,
+                router: androidx.mediarouter.media.MediaRouter,
+                route: androidx.mediarouter.media.MediaRouter.RouteInfo,
             ) = sync()
         }
     }
@@ -166,22 +182,6 @@ fun PlayerScreen(
                 router?.removeCallback(castCallback)
             } catch (_: Exception) {
             }
-        }
-    }
-    fun refreshCastRoutes() {
-        try {
-            val router = androidx.mediarouter.media.MediaRouter.getInstance(ctx)
-            val cat = com.google.android.gms.cast.CastMediaControlIntent
-                .categoryForCast("CC1AD845")
-            castRoutes = router.routes.filter {
-                try {
-                    it.isEnabled && it.supportsControlCategory(cat)
-                } catch (_: Exception) {
-                    false
-                }
-            }
-        } catch (_: Exception) {
-            castRoutes = emptyList()
         }
     }
     // Sleep timer (F7): apaga al vencer. Se cancela solo al salir.
