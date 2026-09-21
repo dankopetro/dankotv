@@ -528,7 +528,7 @@ class SeamlessPlayer(
             val node = mpv.getPropertyNode("track-list") as? MPVNode.ArrayNode
                 ?: return emptyList()
             var n = 0
-            node.value.mapNotNull { item ->
+            val out = node.value.mapNotNull { item ->
                 val map = (item as? MPVNode.MapNode)?.value ?: return@mapNotNull null
                 val type = (map["type"] as? MPVNode.StringNode)?.value ?: return@mapNotNull null
                 if (type != kind) return@mapNotNull null
@@ -544,7 +544,10 @@ class SeamlessPlayer(
                     .joinToString(" · ").ifEmpty { "Pista $n" }
                 id to label
             }
-        } catch (_: Exception) {
+            android.util.Log.i(tag, "tracks $kind: ${out.size}")
+            out
+        } catch (e: Exception) {
+            android.util.Log.w(tag, "tracks $kind falló: $e")
             emptyList()
         }
     }

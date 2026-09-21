@@ -110,10 +110,17 @@ fun PlayerScreen(
     var showSub by remember { mutableStateOf(false) }
     LaunchedEffect(state) {
         if (state is PlayerState.Playing) {
-            try {
-                showAud = player.mediaTracks("audio").size > 1
-                showSub = player.mediaTracks("subtitle").isNotEmpty()
-            } catch (_: Exception) {
+            // Las pistas (sobre todo subtítulos en mkv por red) pueden llegar
+            // DESPUÉS del file-loaded: reintentar diferido (bug 19/09: el
+            // botón SUB no aparecía en pelis que sí traen subtítulos).
+            repeat(3) { attempt ->
+                try {
+                    if (player.mediaTracks("audio").size > 1) showAud = true
+                    if (player.mediaTracks("subtitle").isNotEmpty()) showSub = true
+                    if (showAud && showSub) return@LaunchedEffect
+                } catch (_: Exception) {
+                }
+                if (attempt < 2) kotlinx.coroutines.delay(4000)
             }
         }
     }
