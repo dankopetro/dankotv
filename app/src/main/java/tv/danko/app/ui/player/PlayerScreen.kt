@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -33,6 +35,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextOverflow
 import tv.danko.app.data.EpgRepository
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -572,37 +575,54 @@ fun PlayerScreen(
                 Column(
                     Modifier.fillMaxWidth()
                         .background(Color.Black.copy(alpha = 0.6f))
-                        .padding(8.dp),
+                        .padding(if (isLandscape && !isTv) 4.dp else 8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
+                    // Botonera compacta en horizontal del teléfono (los
+                    // botones M3 default son altos y tapaban el video).
+                    val compactCtl = isLandscape && !isTv
+                    val ctlMod =
+                        if (compactCtl) Modifier.height(32.dp) else Modifier
+                    val ctlPad =
+                        if (compactCtl) {
+                            PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        } else {
+                            ButtonDefaults.ContentPadding
+                        }
                     androidx.compose.foundation.lazy.LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(
+                            if (compactCtl) 4.dp else 8.dp,
+                        ),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (hasQueue) {
                             item {
                                 Button(
                                     onClick = { stepChannel(-1) },
-                                    modifier = Modifier.tvFocusBorder(),
+                                    modifier = Modifier.tvFocusBorder().then(ctlMod),
+                                    contentPadding = ctlPad,
                                 ) { PrevIcon() }
                             }
                             item {
                                 Button(
                                     onClick = { stepChannel(1) },
-                                    modifier = Modifier.tvFocusBorder(),
+                                    modifier = Modifier.tvFocusBorder().then(ctlMod),
+                                    contentPadding = ctlPad,
                                 ) { NextIcon() }
                             }
                         }
                         item {
                             Button(
                                 onClick = { paused = player.togglePause() },
-                                modifier = Modifier.focusRequester(pauseFocus).tvFocusBorder(),
+                                modifier = Modifier.focusRequester(pauseFocus).tvFocusBorder().then(ctlMod),
+                                contentPadding = ctlPad,
                             ) { if (paused) PlayIcon() else PauseIcon() }
                         }
                         item {
                             Button(
                                 onClick = { muted = player.toggleMute() },
-                                modifier = Modifier.tvFocusBorder(),
+                                modifier = Modifier.tvFocusBorder().then(ctlMod),
+                                contentPadding = ctlPad,
                             ) { if (muted) MutedIcon() else MuteIcon() }
                         }
                         // Selector de pistas (texto: sin glifos). Solo si hay
@@ -615,7 +635,8 @@ fun PlayerScreen(
                                         audioLabel = player.cycleTrack("audio") ?: audioLabel
                                     }
                                 },
-                                modifier = Modifier.tvFocusBorder(),
+                                modifier = Modifier.tvFocusBorder().then(ctlMod),
+                                contentPadding = ctlPad,
                             ) { Text("AUD" + (audioLabel?.let { ":$it" } ?: "")) }
                         }
                         }
@@ -627,21 +648,24 @@ fun PlayerScreen(
                                         subLabel = player.cycleTrack("subtitle") ?: subLabel
                                     }
                                 },
-                                modifier = Modifier.tvFocusBorder(),
+                                modifier = Modifier.tvFocusBorder().then(ctlMod),
+                                contentPadding = ctlPad,
                             ) { Text("SUB" + (subLabel?.let { ":$it" } ?: "")) }
                         }
                         }
                         item {
                             Button(
                                 onClick = { applyFullscreen(!fullscreen) },
-                                modifier = Modifier.tvFocusBorder(),
+                                modifier = Modifier.tvFocusBorder().then(ctlMod),
+                                contentPadding = ctlPad,
                             ) { FullscreenIcon() }
                         }
                         // Sleep timer (texto, TV y teléfono).
                         item {
                             Button(
                                 onClick = { showSleep = true },
-                                modifier = Modifier.tvFocusBorder(),
+                                modifier = Modifier.tvFocusBorder().then(ctlMod),
+                                contentPadding = ctlPad,
                             ) { Text(if (sleepUntil > 0) "Sleep ON" else "Sleep") }
                         }
                         // Zoom llenar/ajustar (SOLO landscape no-TV): recorta
@@ -651,7 +675,8 @@ fun PlayerScreen(
                             item {
                                 Button(
                                     onClick = { toggleFill() },
-                                    modifier = Modifier.tvFocusBorder(),
+                                    modifier = Modifier.tvFocusBorder().then(ctlMod),
+                                    contentPadding = ctlPad,
                                 ) { if (zoomFactor > 1f) ZoomOutIcon() else ZoomInIcon() }
                             }
                         }
@@ -661,7 +686,8 @@ fun PlayerScreen(
                             item {
                                 Button(
                                     onClick = { toggleRec() },
-                                    modifier = Modifier.tvFocusBorder(),
+                                    modifier = Modifier.tvFocusBorder().then(ctlMod),
+                                    contentPadding = ctlPad,
                                 ) {
                                     // Punto/cuadrado DIBUJADOS en rojo puro: el glifo
                                     // ⏺ (U+23FA) lo dibuja la fuente emoji en blanco
@@ -677,7 +703,8 @@ fun PlayerScreen(
                             item {
                                 Button(
                                     onClick = { snapAndShare() },
-                                    modifier = Modifier.tvFocusBorder(),
+                                    modifier = Modifier.tvFocusBorder().then(ctlMod),
+                                    contentPadding = ctlPad,
                                 ) { PhotoIcon() }
                             }
                         }
@@ -685,7 +712,8 @@ fun PlayerScreen(
                             item {
                                 Button(
                                     onClick = { scope.launch { toggleFav() } },
-                                    modifier = Modifier.tvFocusBorder(),
+                                    modifier = Modifier.tvFocusBorder().then(ctlMod),
+                                    contentPadding = ctlPad,
                                 ) {
                                     // Estrella dibujada compartida (ver StarIcon:
                                     // glifos ★/☆ no renderizan en algunos
@@ -697,7 +725,8 @@ fun PlayerScreen(
                         item {
                             Button(
                                 onClick = { closePlayer() },
-                                modifier = Modifier.tvFocusBorder(),
+                                modifier = Modifier.tvFocusBorder().then(ctlMod),
+                                contentPadding = ctlPad,
                             ) { StopIcon() }
                         }
                         item {
