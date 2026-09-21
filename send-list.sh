@@ -1,41 +1,97 @@
 #!/bin/bash
 # send-list.sh — Envía una lista M3U al teléfono y/o a la TV (uso personal).
-# Uso: ./send-list.sh [URL_M3U] [NOMBRE] [phone|tv|both]
-# Si falta algo, lo pregunta. Verifica HTTP 200 antes, dispara el alta por
-# intent (backdoor add_list de MainActivity) y espera hasta que la lista
-# aparece (o falla con cartel). Requiere adb + devices autorizados.
+# Simplemente ejecutar: ./send-list.sh
+# El script pregunta todo paso a paso. También acepta argumentos:
+#   ./send-list.sh "URL" "Nombre" phone|tv|both
 #
-# Ej: ./send-list.sh "http://host/get.php?username=U&password=P&type=m3u_plus" MiLista both
+# Verifica HTTP 200 antes, dispara el alta por intent (backdoor add_list de
+# MainActivity) y espera hasta que la lista aparece (o falla con cartel).
+# Requiere adb + devices autorizados. NO tocar el teléfono/TV mientras corre.
 
 set -u
 TV="192.168.0.10:5555"
 TIMEOUT_SECS="${TIMEOUT_SECS:-1200}"
 POLL_SECS=30
 
+phone_serial() {
+    adb devices 2>/dev/null | awk '$2=="device" {print $1}' | grep -v "192.168.0.10" | head -1
+}
+
 URL="${1:-}"
 NAME="${2:-}"
 TARGET="${3:-}"
 
-[ -z "$URL" ] && read -r -p "URL M3U: " URL
-[ -z "$NAME" ] && read -r -p "Nombre de lista: " NAME
-if [ -z "$TARGET" ]; then
-    echo "Destino: [1] teléfono  [2] TV  [3] ambos"
-    read -r -p "Opción (1/2/3): " OPT
-    case "$OPT" in
-        1) TARGET="phone" ;;
-        2) TARGET="tv" ;;
-        *) TARGET="both" ;;
-    esac
+echo "=== Enviar lista IPTV a mis dispositivos ==="
+echo
+
+# 1) URL (obligatoria, tiene que empezar con http).
+while :; do
+    if [ -z "$URL" ]; then
+        read -r -p "Ponga la URL: " URL
+    fi
+    # Quitar espacios accidentales al principio/fin.
+    URL="$(echo "$URL" | sed 's/^ *//;s/ *$//')"
+    if [ -z "$URL" ]; then
+        echo "  La URL no puede estar vacía."
+        URL=""
+    elif [[ "$URL" != http://* && "$URL" != https://* ]]; then
+        echo "  Eso no parece una URL (tiene que empezar con http:// o https://)."
+        URL=""
+    else
+        break
+    fi
+done
+
+# 2) Nombre (obligatorio).
+while [ -z "$NAME" ]; do
+    read -r -p "Nombre a su Lista: " NAME
+    NAME="$(echo "$NAME" | sed 's/^ *//;s/ *$//')"
+    if [ -z "$NAME" ]; then
+        echo "  El nombre no puede estar vacío."
+    fi
+done
+
+# 3) Destino (solo 1, 2 o 3; repite hasta válido).
+PHONE_DESC=""
+TV_DESC=""
+if adb devices 2>/dev/null | grep -q "192.168.0.10"; then
+    TV_DESC=" (en línea)"
+else
+    TV_DESC=" (SIN CONEXIÓN ahora)"
 fi
+if [ -n "$(phone_serial 2>/dev/null)" ]; then
+    PHONE_DESC=" (en línea)"
+else
+    PHONE_DESC=" (SIN CONEXIÓN ahora)"
+fi
+# 3) Destino (solo 1, 2 o 3; repite hasta válido). Con argumento válido se saltea.
+case "$TARGET" in
+    phone|tv|both) ;;
+    *)
+        TARGET=""
+        while :; do
+            echo
+            echo "Elija a qué dispositivo enviar:"
+            echo "  1) TV$TV_DESC"
+            echo "  2) Telefono$PHONE_DESC"
+            echo "  3) Ambos"
+            read -r -p "Opción [1/2/3]: " OPT
+            case "$OPT" in
+                1) TARGET="tv"; break ;;
+                2) TARGET="phone"; break ;;
+                3) TARGET="both"; break ;;
+                *) echo "  Opción inválida: escriba 1, 2 o 3." ;;
+            esac
+        done
+        ;;
+esac
 
-phone_serial() {
-    adb devices | awk '$2=="device" {print $1}' | grep -v "192.168.0.10" | head -1
-}
-
+echo
 echo "== Verificando URL…"
 CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 -A "Mozilla/5.0" "$URL")
 if [ "$CODE" != "200" ]; then
-    echo "ERROR: la URL responde HTTP $CODE (se esperaba 200). Revisá el link."
+    echo "ERROR: la URL responde HTTP $CODE (se esperaba 200)."
+    echo "Revisá el link, usuario o clave. No se envió nada."
     exit 1
 fi
 echo "OK: HTTP 200"
@@ -50,8 +106,17 @@ esac
 set -- $DEVICES
 if [ $# -eq 0 ] || [ -z "$1" ]; then
     echo "ERROR: ningún dispositivo en línea para '$TARGET'."
+    echo "Revisá el Wi-Fi y la depuración inalámbrica e intentá de nuevo."
     exit 1
 fi
+
+# Confirmación final antes de actuar.
+echo
+echo "Voy a enviar la lista '$NAME' a: $*"
+read -r -p "¿Confirmar? [S/n]: " CONFIRM
+case "$CONFIRM" in
+    [nN]*) echo "Cancelado, no se hizo nada."; exit 0 ;;
+esac
 
 send_one() {
     local SER="$1" N="$2" U="$3"
@@ -75,11 +140,10 @@ send_one() {
             return 1
         fi
         if echo "$dump" | grep -q "$N"; then
-            local count
-            count=$(echo "$dump" | grep -A0 "$N" | head -2 | tail -1)
-            echo "  OK: lista presente ($count)"
+            echo "  OK: '$N' presente en el dispositivo."
             return 0
         fi
+        echo "  … esperando ($((waited / 60)) min) — no toques el dispositivo."
     done
     echo "  TIMEOUT tras $((TIMEOUT_SECS / 60)) min: la lista no apareció."
     return 1
@@ -91,8 +155,8 @@ for SER in $DEVICES; do
 done
 
 if [ "$FAIL" -eq 0 ]; then
-    echo "== Listo: '$NAME' en [$TARGET]"
+    echo "== Listo: '$NAME' enviado."
 else
-    echo "== Terminado con fallos (ver arriba)"
+    echo "== Terminado con fallos (ver arriba)."
     exit 1
 fi
