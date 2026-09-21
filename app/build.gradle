@@ -14,8 +14,8 @@ android {
         applicationId "tv.danko.app"
         minSdk 26
         targetSdk 36
-        versionCode 46
-        versionName "0.1-f5"
+        versionCode 47
+        versionName "1.0"
         // TV = armeabi-v7a (32 bits! rtd284x con userspace de 32b) +
         // teléfono = arm64-v8a. Sin x86 (emulador). El APK traía 4 ABIs
         // (174MB, installs eternos); con 2 queda en ~95MB.
@@ -51,6 +51,17 @@ android {
     kotlin {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
+    }
+    // Nombre de salida con marca: dankotv-1.0.apk (release).
+    // (API nueva: applicationVariants ya no existe en AGP 9.)
+    def appVer = android.defaultConfig.versionName
+    androidComponents {
+        onVariants(selector().all()) { variant ->
+            variant.outputs.forEach { output ->
+                def suffix = variant.buildType == "release" ? "" : "-debug"
+                output.outputFileName.set("dankotv-${appVer}${suffix}.apk")
+            }
         }
     }
     // Room: exporta esquemas (útil para migraciones F6+)
