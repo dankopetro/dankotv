@@ -53,7 +53,7 @@ class FakeDao2 : PlaylistDao {
         channels.getOrPut(l) { mutableListOf() }.addAll(rows)
     }
     override suspend fun channels(list: String) =
-        (channels[list] ?: emptyList()).sortedBy { it.title }
+        vis(list).sortedBy { it.title }
     override suspend fun groups(list: String) =
         (channels[list] ?: emptyList()).map { it.group }.toSortedSet().toList()
     override suspend fun search(list: String, q: String) =
@@ -83,6 +83,27 @@ class FakeDao2 : PlaylistDao {
     override suspend fun insertEpg(rows: List<EpgProgramme>) {
         epg.addAll(rows)
     }
+    override suspend fun setHidden(list: String, url: String, hidden: Boolean) {
+        all(list).firstOrNull { it.url == url }?.let {
+            val i = all(list).indexOf(it)
+            all(list)[i] = it.copy(hidden = hidden)
+        }
+    }
+    override suspend fun hiddenChannels(list: String, limit: Int) =
+        all(list).filter { it.hidden }.sortedBy { it.title }.take(limit)
+    override suspend fun countHidden(list: String) = all(list).count { it.hidden }
+    override suspend fun renameLists(old: String, new: String) {
+        lists.remove(old)?.let { lists[new] = it.copy(name = new) }
+    }
+    override suspend fun renameChannelsList(old: String, new: String) {
+        channels[new] = channels.remove(old) ?: mutableListOf()
+        channels[new]!!.forEachIndexed { i, c -> channels[new]!![i] = c.copy(listName = new) }
+    }
+    override suspend fun renameFavorites(old: String, new: String) {
+        val mv = favs.filter { it.first == old }
+        favs.removeIf { it.first == old }
+        favs.addAll(mv.map { new to it.second })
+    }
     override suspend fun pruneEpg(now: Long) {
         epg.removeIf { it.endMs < now }
     }
@@ -94,24 +115,25 @@ class FakeDao2 : PlaylistDao {
         channels[real] = channels[tmp] ?: mutableListOf()
     }
     override suspend fun channelsPaged(list: String, group: String?, limit: Int, offset: Int) =
-        all(list).filter { group == null || it.group == group }.drop(offset).take(limit)
+        vis(list).filter { group == null || it.group == group }.drop(offset).take(limit)
 
     // --- páginas limitadas (espejo del SQL limitado del DAO real) ---
     private fun all(list: String) = channels[list] ?: mutableListOf()
+    private fun vis(list: String) = all(list).filter { !it.hidden }
     override suspend fun channelsLimited(list: String, limit: Int) =
-        all(list).sortedBy { it.title }.take(limit)
-    override suspend fun countChannels(list: String) = all(list).size
+        vis(list).sortedBy { it.title }.take(limit)
+    override suspend fun countChannels(list: String) = vis(list).size
     override suspend fun channelsInGroup(list: String, group: String, limit: Int) =
-        all(list).filter { it.group == group }.sortedBy { it.title }.take(limit)
+        vis(list).filter { it.group == group }.sortedBy { it.title }.take(limit)
     override suspend fun countInGroup(list: String, group: String) =
-        all(list).count { it.group == group }
+        vis(list).count { it.group == group }
     override suspend fun searchInGroup(list: String, group: String, q: String, limit: Int) =
-        all(list).filter { it.group == group && it.title.contains(q.replace("\\", ""), true) }
+        vis(list).filter { it.group == group && it.title.contains(q.replace("\\", ""), true) }
             .sortedBy { it.title }.take(limit)
     override suspend fun countSearchInGroup(list: String, group: String, q: String) =
-        all(list).count { it.group == group && it.title.contains(q.replace("\\", ""), true) }
+        vis(list).count { it.group == group && it.title.contains(q.replace("\\", ""), true) }
     override suspend fun countSearch(list: String, q: String) =
-        all(list).count { it.title.contains(q.replace("\\", ""), true) }
+        vis(list).count { it.title.contains(q.replace("\\", ""), true) }
     private fun favUrls(list: String) = favs.filter { it.first == list }.map { it.second }.toSet()
     override suspend fun favoriteChannels(list: String, limit: Int) =
         all(list).filter { it.url in favUrls(list) }.sortedBy { it.title }.take(limit)

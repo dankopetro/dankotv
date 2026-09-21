@@ -322,9 +322,10 @@ máx 3 conexiones). Comparativa completa Linux-vs-Android hecha el 16/09.
   Catchup NO se hace (el proveedor tiene 0 canales con archivo).
 - **F6 VOD + series** (con selector audio/subs incluido).
 - **F7 Logos + editor + aviso de conexiones + MediaSession + sleep**.
-- **F8 Grabación en TV** (con lista "Mis grabaciones") + **Cast SOLO teléfono**
+- **F8 Cast SOLO teléfono**
   (caso invitado: castear a TV ajena en la misma red; la TCL ya tiene la app,
   no se justifica en TV). Timeshift en espera (complejo, solo si se pide).
+  Grabación en TV: ELIMINADA 21/09 a pedido del usuario (no debe ir).
 - **F9 release**: signingConfig release (keystore del usuario), App Bundle,
   GitHub Release. DESCARTADOS 17/09: catchup, i18n, PIN parental.
 

@@ -8,7 +8,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 /** v1: listas + canales + favoritos; v3: + programas EPG (F5). */
 @Database(
     entities = [ListEntity::class, ChannelEntity::class, FavoriteEntity::class, EpgProgramme::class],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -48,5 +48,12 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
 val MIGRATION_3_4 = object : Migration(3, 4) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("DELETE FROM `epg_programmes`")
+    }
+}
+
+/** v4→v5: columna hidden en channels (editor F7 ocultar canales). */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `channels` ADD COLUMN `hidden` INTEGER NOT NULL DEFAULT 0")
     }
 }

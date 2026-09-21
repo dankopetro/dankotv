@@ -60,6 +60,7 @@ fun ListsScreen(
 ) {
     val ui by vm.ui.collectAsState()
     var showDelete by remember { mutableStateOf<String?>(null) }
+    var showEdit by remember { mutableStateOf<tv.danko.app.data.db.ListEntity?>(null) }
     // TV: foco inicial en la acción principal (en teléfono no afecta al tacto).
     val entryFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { entryFocus.requestFocus() }
@@ -97,6 +98,7 @@ fun ListsScreen(
                     ListRow(
                         e, onOpen = { onOpen(e.name) },
                         onVod = { onVod(e.name) }, onSeries = { onSeries(e.name) },
+                        onEdit = { showEdit = e },
                         onDelete = { showDelete = e.name },
                     )
                 }
@@ -122,6 +124,17 @@ fun ListsScreen(
             },
         )
     }
+    // Editor F7: mismo diálogo precargado; al guardar recarga el contenido.
+    showEdit?.let { e ->
+        NewListDialog(
+            initial = e,
+            onDismiss = { showEdit = null },
+            onSave = { spec ->
+                vm.saveEdit(e.name, spec) { showEdit = null }
+            },
+            onTest = { spec, cb -> vm.testSpec(spec, cb) },
+        )
+    }
 }
 
 @Composable
@@ -130,6 +143,7 @@ private fun ListRow(
     onOpen: () -> Unit,
     onVod: () -> Unit,
     onSeries: () -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Card(Modifier.fillMaxWidth().tvFocusBorder().clickable(onClick = onOpen)) {
@@ -148,6 +162,7 @@ private fun ListRow(
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton(onClick = onVod) { Text("Películas") }
                 TextButton(onClick = onSeries) { Text("Series") }
+                TextButton(onClick = onEdit) { Text("Editar") }
             }
         }
     }
@@ -156,16 +171,19 @@ private fun ListRow(
 /** Diálogo "Nueva lista" (espejo de NewListDialog): nombre + M3U/Xtream + probar. */
 @Composable
 fun NewListDialog(
+    initial: tv.danko.app.data.db.ListEntity? = null,
     onDismiss: () -> Unit,
     onSave: (PlaylistSpec) -> Unit,
     onTest: (PlaylistSpec, (Boolean, String) -> Unit) -> Unit,
 ) {
-    var name by remember { mutableStateOf("") }
-    var tab by remember { mutableIntStateOf(0) }
-    var url by remember { mutableStateOf("") }
-    var host by remember { mutableStateOf("") }
-    var user by remember { mutableStateOf("") }
-    var pass by remember { mutableStateOf("") }
+    var name by remember(initial) { mutableStateOf(initial?.name ?: "") }
+    var tab by remember(initial) {
+        mutableIntStateOf(if (initial?.type == "xtream") 1 else 0)
+    }
+    var url by remember(initial) { mutableStateOf(initial?.url ?: "") }
+    var host by remember(initial) { mutableStateOf(initial?.host ?: "") }
+    var user by remember(initial) { mutableStateOf(initial?.user ?: "") }
+    var pass by remember(initial) { mutableStateOf(initial?.pass ?: "") }
     var status by remember { mutableStateOf("") }
     var testing by remember { mutableStateOf(false) }
     var err by remember { mutableStateOf("") }
@@ -192,7 +210,7 @@ fun NewListDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Nueva lista") },
+        title = { Text(if (initial != null) "Editar lista" else "Nueva lista") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(name, { name = it; err = "" }, label = { Text("Nombre (ej: Mi proveedor)") }, singleLine = true,

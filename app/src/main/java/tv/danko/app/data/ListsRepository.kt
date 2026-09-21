@@ -125,6 +125,35 @@ class ListsRepository(
         dao.deleteList(name)
         dao.clearFavorites(name)
     }
+
+    /**
+     * Editor F7: renombra (3 tablas atómico + last_list) y/o recarga desde
+     * el nuevo origen. Si el nombre no cambió, solo recarga contenido.
+     */
+    suspend fun updateSpec(oldName: String, spec: PlaylistSpec): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                if (spec.name != oldName) {
+                    dao.renameListData(oldName, spec.name)
+                    if (settings.lastList.first() == oldName) {
+                        settings.setLastList(spec.name)
+                    }
+                }
+                loadSpec(spec).getOrThrow()
+            }
+        }
+
+    suspend fun renameList(oldName: String, newName: String) = withContext(Dispatchers.IO) {
+        dao.renameListData(oldName, newName)
+        if (settings.lastList.first() == oldName) {
+            settings.setLastList(newName)
+        }
+    }
+
+    suspend fun setHidden(list: String, url: String, hidden: Boolean) =
+        dao.setHidden(list, url, hidden)
+
+    suspend fun hiddenPage(list: String) = dao.hiddenChannels(list, 2000)
     suspend fun channels(list: String) = dao.channels(list)
 
     // --- páginas limitadas (344k canales): display 2000 + COUNT del total ---

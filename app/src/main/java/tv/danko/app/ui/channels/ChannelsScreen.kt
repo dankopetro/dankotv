@@ -127,10 +127,12 @@ fun ChannelsScreen(
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             // key por PK: con 344k canales hay títulos/grupos duplicados reales
             // (group/title crasheaba con "key was already used").
-            items(ui.channels, key = { it.id }) { ch ->
-                ChannelRow(
-                    ch, fav = ch.url in ui.favs, onPlay = { onPlay(ch, ui.channels) }, onFav = { vm.toggleFav(ch.url) },
-                    modifier = if (ch == ui.channels.firstOrNull()) {
+                items(ui.channels, key = { it.id }) { ch ->
+                    ChannelRow(
+                        ch, fav = ch.url in ui.favs, onPlay = { onPlay(ch, ui.channels) }, onFav = { vm.toggleFav(ch.url) },
+                        onHide = { vm.toggleHide(ch.url, !ch.hidden) },
+                        hideLabel = if (ch.hidden) "Mostrar" else "Ocultar",
+                        modifier = if (ch == ui.channels.firstOrNull()) {
                         Modifier.focusRequester(firstFocus)
                     } else {
                         Modifier
@@ -147,6 +149,8 @@ private fun ChannelRow(
     fav: Boolean,
     onPlay: () -> Unit,
     onFav: () -> Unit,
+    onHide: () -> Unit,
+    hideLabel: String,
     modifier: Modifier = Modifier,
 ) {
     Card(modifier.fillMaxWidth().tvFocusBorder().clickable(onClick = onPlay)) {
@@ -177,6 +181,8 @@ private fun ChannelRow(
             IconButton(onClick = onFav) {
                 tv.danko.app.ui.StarIcon(fav, tint = MaterialTheme.colorScheme.primary)
             }
+            // Editor F7: ocultar/mostrar (texto: sin glifos).
+            TextButton(onClick = onHide) { Text(hideLabel) }
         }
     }
 }

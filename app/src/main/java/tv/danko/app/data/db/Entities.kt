@@ -43,6 +43,9 @@ data class ChannelEntity(
     val url: String,
     val logo: String = "",
     val epgId: String = "",
+    // Oculto por el usuario (editor F7): no sale en browse/búsqueda/conteos
+    // (sí en favoritos: son elección explícita).
+    val hidden: Boolean = false,
 )
 
 @Entity(
@@ -114,7 +117,7 @@ interface PlaylistDao {
         insertChannels(rows)
     }
 
-    @Query("SELECT * FROM channels WHERE listName = :list ORDER BY title")
+    @Query("SELECT * FROM channels WHERE listName = :list AND hidden = 0 ORDER BY title")
     suspend fun channels(list: String): List<ChannelEntity>
 
     // --- queries LIMITADAS para listas gigantes (344k): el SELECT completo
@@ -122,7 +125,7 @@ interface PlaylistDao {
     //     (verificado en device: "0 canales" eterno). Display = 2000, igual
     //     que DISPLAY_LIMIT en mainview.py. ---
 
-    @Query("SELECT * FROM channels WHERE listName = :list ORDER BY title LIMIT :limit")
+    @Query("SELECT * FROM channels WHERE listName = :list AND hidden = 0 ORDER BY title LIMIT :limit")
     suspend fun channelsLimited(list: String, limit: Int = 2000): List<ChannelEntity>
 
     /**
@@ -130,33 +133,33 @@ interface PlaylistDao {
      * pueden traer de una — ver comentario de channelsLimited).
      */
     @Query(
-        "SELECT * FROM channels WHERE listName = :list AND (:group IS NULL OR `group` = :group) " +
+        "SELECT * FROM channels WHERE listName = :list AND hidden = 0 AND (:group IS NULL OR `group` = :group) " +
             "ORDER BY title LIMIT :limit OFFSET :offset"
     )
     suspend fun channelsPaged(list: String, group: String?, limit: Int, offset: Int): List<ChannelEntity>
 
-    @Query("SELECT COUNT(*) FROM channels WHERE listName = :list")
+    @Query("SELECT COUNT(*) FROM channels WHERE listName = :list AND hidden = 0")
     suspend fun countChannels(list: String): Int
 
-    @Query("SELECT * FROM channels WHERE listName = :list AND `group` = :group ORDER BY title LIMIT :limit")
+    @Query("SELECT * FROM channels WHERE listName = :list AND `group` = :group AND hidden = 0 ORDER BY title LIMIT :limit")
     suspend fun channelsInGroup(list: String, group: String, limit: Int = 2000): List<ChannelEntity>
 
-    @Query("SELECT COUNT(*) FROM channels WHERE listName = :list AND `group` = :group")
+    @Query("SELECT COUNT(*) FROM channels WHERE listName = :list AND `group` = :group AND hidden = 0")
     suspend fun countInGroup(list: String, group: String): Int
 
     @Query(
-        "SELECT * FROM channels WHERE listName = :list AND `group` = :group AND title LIKE '%' || :q || '%' ESCAPE '\\' " +
+        "SELECT * FROM channels WHERE listName = :list AND `group` = :group AND hidden = 0 AND title LIKE '%' || :q || '%' ESCAPE '\\' " +
             "ORDER BY title LIMIT :limit"
     )
     suspend fun searchInGroup(list: String, group: String, q: String, limit: Int = 2000): List<ChannelEntity>
 
     @Query(
-        "SELECT COUNT(*) FROM channels WHERE listName = :list AND `group` = :group AND title LIKE '%' || :q || '%' ESCAPE '\\'"
+        "SELECT COUNT(*) FROM channels WHERE listName = :list AND `group` = :group AND hidden = 0 AND title LIKE '%' || :q || '%' ESCAPE '\\'"
     )
     suspend fun countSearchInGroup(list: String, group: String, q: String): Int
 
     @Query(
-        "SELECT COUNT(*) FROM channels WHERE listName = :list AND title LIKE '%' || :q || '%' ESCAPE '\\'"
+        "SELECT COUNT(*) FROM channels WHERE listName = :list AND hidden = 0 AND title LIKE '%' || :q || '%' ESCAPE '\\'"
     )
     suspend fun countSearch(list: String, q: String): Int
 
@@ -190,7 +193,7 @@ interface PlaylistDao {
 
     /** Búsqueda incremental. Escapa % _ y \ para que LIKE sea literal. */
     @Query(
-        "SELECT * FROM channels WHERE listName = :list AND title LIKE '%' || :q || '%' ESCAPE '\\' " +
+        "SELECT * FROM channels WHERE listName = :list AND hidden = 0 AND title LIKE '%' || :q || '%' ESCAPE '\\' " +
             "ORDER BY title LIMIT 2000"
     )
     suspend fun search(list: String, q: String): List<ChannelEntity>
@@ -206,6 +209,33 @@ interface PlaylistDao {
 
     @Query("DELETE FROM favorites WHERE listName = :list")
     suspend fun clearFavorites(list: String)
+
+    /** Ocultar/mostrar un canal (editor F7). */
+    @Query("UPDATE channels SET hidden = :hidden WHERE listName = :list AND url = :url")
+    suspend fun setHidden(list: String, url: String, hidden: Boolean)
+
+    @Query("SELECT * FROM channels WHERE listName = :list AND hidden = 1 ORDER BY title LIMIT :limit")
+    suspend fun hiddenChannels(list: String, limit: Int = 2000): List<ChannelEntity>
+
+    @Query("SELECT COUNT(*) FROM channels WHERE listName = :list AND hidden = 1")
+    suspend fun countHidden(list: String): Int
+
+    /** Renombrar lista en las 3 tablas (editor F7), atómico. */
+    @Transaction
+    suspend fun renameListData(old: String, new: String) {
+        renameLists(old, new)
+        renameChannelsList(old, new)
+        renameFavorites(old, new)
+    }
+
+    @Query("UPDATE lists SET name = :new WHERE name = :old")
+    suspend fun renameLists(old: String, new: String)
+
+    @Query("UPDATE channels SET listName = :new WHERE listName = :old")
+    suspend fun renameChannelsList(old: String, new: String)
+
+    @Query("UPDATE favorites SET listName = :new WHERE listName = :old")
+    suspend fun renameFavorites(old: String, new: String)
 
     @Query(
         "SELECT * FROM epg_programmes WHERE listName = :list AND channelUrl = :url " +

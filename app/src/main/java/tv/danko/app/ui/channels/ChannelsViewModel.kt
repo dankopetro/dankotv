@@ -42,7 +42,7 @@ class ChannelsViewModel(
 
     init {
         viewModelScope.launch {
-            val groups = listOf("Todas", FAV_GROUP) + repo.groups(listName)
+            val groups = listOf("Todas", FAV_GROUP, HID_GROUP) + repo.groups(listName)
             val saved = settings.lastGroup.first()
             val group = if (saved in groups) saved else "Todas"
             _ui.value = ChannelsUiState(
@@ -91,6 +91,12 @@ class ChannelsViewModel(
                 } else {
                     repo.searchFavoritesPage(listName, s.query)
                 }
+                HID_GROUP -> {
+                    val all = repo.hiddenPage(listName)
+                    val rows = if (s.query.isBlank()) all
+                    else all.filter { it.title.contains(s.query, ignoreCase = true) }
+                    rows.take(2000) to rows.size
+                }
                 else -> if (s.query.isBlank()) {
                     repo.groupPage(listName, s.group) to repo.countInGroup(listName, s.group)
                 } else {
@@ -111,6 +117,14 @@ class ChannelsViewModel(
         }
     }
 
+    /** Oculta/muestra un canal (editor F7). Refresca si se mira Ocultos. */
+    fun toggleHide(url: String, hidden: Boolean) {
+        viewModelScope.launch {
+            repo.setHidden(listName, url, hidden)
+            scheduleFilter(debounceMs = 0)
+        }
+    }
+
     /** Recarga la lista del servidor (reload_list en Linux). */
     fun reload(onDone: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
@@ -124,7 +138,7 @@ class ChannelsViewModel(
                     "reload $listName falló: ${res?.exceptionOrNull()}",
                 )
             }
-            val groups = listOf("Todas", FAV_GROUP) + repo.groups(listName)
+            val groups = listOf("Todas", FAV_GROUP, HID_GROUP) + repo.groups(listName)
             val group = if (_ui.value.group in groups) _ui.value.group else "Todas"
             _ui.value = _ui.value.copy(loading = false, groups = groups, group = group)
             scheduleFilter(debounceMs = 0)
@@ -135,5 +149,6 @@ class ChannelsViewModel(
     companion object {
         const val DISPLAY_LIMIT = 2000 // como DISPLAY_LIMIT en mainview.py
         const val FAV_GROUP = "★ Favoritos" // igual que mainview.py:417
+        const val HID_GROUP = "Ocultos" // pseudo-grupo del editor (texto: sin glifos)
     }
 }

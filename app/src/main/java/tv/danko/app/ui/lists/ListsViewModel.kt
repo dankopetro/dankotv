@@ -61,6 +61,21 @@ class ListsViewModel(private val repo: ListsRepository) : ViewModel() {
         }
     }
 
+    /** Editor F7: renombra y/o recarga desde el nuevo origen. */
+    fun saveEdit(oldName: String, spec: PlaylistSpec, onDone: () -> Unit) {
+        _ui.value = _ui.value.copy(loading = true, loadingName = spec.name, error = null)
+        viewModelScope.launch {
+            val r = repo.updateSpec(oldName, spec)
+            _ui.value = _ui.value.copy(
+                loading = false,
+                loadingName = "",
+                lists = repo.lists(),
+                error = r.exceptionOrNull()?.let { "No se pudo guardar.\n${it.message}" },
+            )
+            onDone()
+        }
+    }
+
     /** Prueba sin guardar (equivale a test_connection): devuelve "OK: N canales" o error. */
     fun testSpec(spec: PlaylistSpec, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
