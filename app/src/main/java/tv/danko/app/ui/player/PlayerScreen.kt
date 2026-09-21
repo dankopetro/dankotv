@@ -117,6 +117,36 @@ fun PlayerScreen(
         mutableStateOf<List<androidx.mediarouter.media.MediaRouter.RouteInfo>>(emptyList())
     }
     var castActive by remember { mutableStateOf(false) }
+    // Cliente remoto actual (para desregistrar el callback al soltar).
+    var castRemote by remember {
+        mutableStateOf<com.google.android.gms.cast.framework.media.RemoteMediaClient?>(null)
+    }
+    // Avisa cuando la TV no puede reproducir (IDLE+ERROR). Sin esto el fallo
+    // era silencio total (bug 21/09: "quedó colgada").
+    val castStatusCallback = remember {
+        object : com.google.android.gms.cast.framework.media.RemoteMediaClient.Callback() {
+            override fun onStatusUpdated() {
+                try {
+                    val st = castRemote?.mediaStatus ?: return
+                    if (st.playerState == com.google.android.gms.cast.MediaStatus.PLAYER_STATE_IDLE &&
+                        st.idleReason == com.google.android.gms.cast.MediaStatus.IDLE_REASON_ERROR
+                    ) {
+                        android.util.Log.w("DankoTV", "cast: la TV no pudo reproducir")
+                        scope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                            try {
+                                android.widget.Toast.makeText(
+                                    ctx, "La TV no pudo reproducir",
+                                    android.widget.Toast.LENGTH_LONG,
+                                ).show()
+                            } catch (_: Exception) {
+                            }
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+            }
+        }
+    }
     fun refreshCastRoutes() {
         try {
             val router = androidx.mediarouter.media.MediaRouter.getInstance(ctx)
@@ -659,7 +689,10 @@ fun PlayerScreen(
                             player.setPaused(true)
                             scope.launch { paused = true }
                             scope.launch { castActive = true }
-                            val lower = curUrl.lowercase()
+                            // HLS para vivo Xtream (.ts no lo reproduce el
+                            // receptor — bug 21/09).
+                            val castUrl = castStreamUrl(curUrl, isLive)
+                            val lower = castUrl.lowercase()
                             val mime = when {
                                 lower.contains(".m3u8") -> "application/x-mpegurl"
                                 lower.endsWith(".mp4") -> "video/mp4"
@@ -678,7 +711,7 @@ fun PlayerScreen(
                             meta.putString(
                                 com.google.android.gms.cast.MediaMetadata.KEY_TITLE, curTitle,
                             )
-                            val info = com.google.android.gms.cast.MediaInfo.Builder(curUrl)
+                            val info = com.google.android.gms.cast.MediaInfo.Builder(castUrl)
                                 .setStreamType(
                                     if (isLive) {
                                         com.google.android.gms.cast.MediaInfo.STREAM_TYPE_LIVE
@@ -690,6 +723,13 @@ fun PlayerScreen(
                                 .setMetadata(meta)
                                 .build()
                             cast.remoteMediaClient?.load(info, true, 0)
+                            try {
+                                cast.remoteMediaClient?.let {
+                                    castRemote = it
+                                    it.registerCallback(castStatusCallback)
+                                }
+                            } catch (_: Exception) {
+                            }
                         } catch (_: Exception) {
                         }
                     }
@@ -698,6 +738,11 @@ fun PlayerScreen(
                         error: Int,
                     ) {
                         try {
+                            try {
+                                castRemote?.unregisterCallback(castStatusCallback)
+                            } catch (_: Exception) {
+                            }
+                            castRemote = null
                             player.setPaused(false)
                             scope.launch { paused = false }
                             scope.launch { castActive = false }
@@ -724,6 +769,11 @@ fun PlayerScreen(
                     manager?.removeSessionManagerListener(listener)
                 } catch (_: Exception) {
                 }
+                try {
+                    castRemote?.unregisterCallback(castStatusCallback)
+                } catch (_: Exception) {
+                }
+                castRemote = null
             }
         }
     }

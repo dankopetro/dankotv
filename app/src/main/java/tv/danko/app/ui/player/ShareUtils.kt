@@ -143,3 +143,37 @@ object ShareUtils {
         }
     }
 }
+
+/**
+ * URL apta para Chromecast (F8): el receptor default NO reproduce .ts en
+ * vivo (la TV queda girando — bug 21/09). Los paneles Xtream sirven el mismo
+ * stream en HLS (`host/live/user/pass/id.m3u8`), que sí entiende.
+ * Solo reescribe vivo estilo Xtream con id numérico; el resto pasa igual.
+ */
+fun castStreamUrl(url: String, live: Boolean): String {
+    if (!live) return url
+    return try {
+        val noQuery = url.substringBefore('?')
+        if (noQuery.contains(".m3u8")) return url
+        val schemeEnd = noQuery.indexOf("://")
+        if (schemeEnd < 0) return url
+        val scheme = noQuery.substring(0, schemeEnd)
+        if (scheme != "http" && scheme != "https") return url
+        val segs = noQuery.substring(schemeEnd + 3).split('/').filter { it.isNotEmpty() }
+        if (segs.size < 4) return url
+        val id = segs.last().substringBefore('.').toIntOrNull() ?: return url
+        val host = segs[0]
+        // Pelis/series van directo (el receptor sí reproduce mkv/mp4).
+        if (segs[1] == "movie" || segs[1] == "series") return url
+        val (user, pass) = if (segs[1] == "live") {
+            if (segs.size < 5) return url
+            segs[2] to segs[3]
+        } else {
+            segs[1] to segs[2]
+        }
+        if (user.isEmpty() || pass.isEmpty()) return url
+        "$scheme://$host/live/$user/$pass/$id.m3u8"
+    } catch (_: Exception) {
+        url
+    }
+}

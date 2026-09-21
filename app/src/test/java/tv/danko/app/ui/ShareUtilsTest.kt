@@ -24,4 +24,38 @@ class ShareUtilsTest {
         assertTrue(b.startsWith("DankoTV_MEGA_HD_"))
         assertTrue(b.matches(Regex("DankoTV_MEGA_HD_\\d{8}-\\d{6}")))
     }
+
+    @Test
+    fun castStreamUrlM3uXtreamAHls() {
+        assertEquals(
+            "http://h/live/u/p/28244.m3u8",
+            castStreamUrl("http://h/u/p/28244", true),
+        )
+    }
+
+    @Test
+    fun castStreamUrlApiLiveAHls() {
+        assertEquals(
+            "http://h/live/u/p/201.m3u8",
+            castStreamUrl("http://h/live/u/p/201.ts", true),
+        )
+    }
+
+    @Test
+    fun castStreamUrlRespetaVodYM3u8() {
+        // VOD no se toca (el receptor sí reproduce mkv/mp4).
+        assertEquals(
+            "http://h/movie/u/p/10.mkv",
+            castStreamUrl("http://h/movie/u/p/10.mkv", true),
+        )
+        // HLS ya existente pasa igual.
+        val hls = "https://r/hls/x/playlist.m3u8?tok=1"
+        assertEquals(hls, castStreamUrl(hls, true))
+        // No-vivo pasa igual.
+        val ts = "http://h/u/p/9"
+        assertEquals(ts, castStreamUrl(ts, false))
+        // Sin id numérico pasa igual.
+        val raro = "http://h/stream.m3u8"
+        assertEquals(raro, castStreamUrl(raro, true))
+    }
 }
