@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.room.Room
 import tv.danko.app.data.ListsRepository
 import tv.danko.app.data.EpgRepository
+import tv.danko.app.data.VodRepository
 import tv.danko.app.data.SettingsStore
 import tv.danko.app.data.XtreamClient
 import tv.danko.app.data.db.AppDatabase
@@ -24,6 +25,7 @@ class AppContainer(context: Context) {
     val xtream: XtreamClient by lazy { XtreamClient() }
     val repo: ListsRepository by lazy { ListsRepository(db.playlists(), settings, xtream = xtream) }
     val epg: EpgRepository by lazy { EpgRepository(db.playlists(), repo, xtream) }
+    val vod: VodRepository by lazy { VodRepository(repo, xtream) }
 }
 
 /** Factory genérica para ViewModels con constructor. */

@@ -522,6 +522,57 @@ class SeamlessPlayer(
         return m
     }
 
+    /** Pistas (id, etiqueta) de un tipo mpv ("audio"/"sub"). Vacío si no hay. */
+    fun mediaTracks(kind: String): List<Pair<String, String>> {
+        return try {
+            val node = mpv.getPropertyNode("track-list") as? MPVNode.ArrayNode
+                ?: return emptyList()
+            var n = 0
+            node.value.mapNotNull { item ->
+                val map = (item as? MPVNode.MapNode)?.value ?: return@mapNotNull null
+                val type = (map["type"] as? MPVNode.StringNode)?.value ?: return@mapNotNull null
+                if (type != kind) return@mapNotNull null
+                n += 1
+                val id = when (val v = map["id"]) {
+                    is MPVNode.IntNode -> v.value.toString()
+                    is MPVNode.StringNode -> v.value
+                    else -> return@mapNotNull null
+                }
+                val lang = (map["lang"] as? MPVNode.StringNode)?.value.orEmpty()
+                val title = (map["title"] as? MPVNode.StringNode)?.value.orEmpty()
+                val label = listOf(lang, title).filter { it.isNotEmpty() }
+                    .joinToString(" · ").ifEmpty { "Pista $n" }
+                id to label
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Rota la pista actual ("audio"→aid, "subtitle"→sid). Incluye "apagado"
+     * para subtítulos. Devuelve la etiqueta nueva (o null si no hay pistas).
+     */
+    fun cycleTrack(kind: String): String? {
+        return try {
+            val prop = if (kind == "audio") "aid" else "sid"
+            val tracks = mediaTracks(kind).toMutableList()
+            if (tracks.isEmpty()) return null
+            if (kind != "audio") tracks.add("no" to "Off")
+            val cur = try {
+                mpv.getPropertyString(prop)
+            } catch (_: Exception) {
+                null
+            }
+            val idx = tracks.indexOfFirst { it.first == cur }
+            val next = tracks[(idx + 1) % tracks.size]
+            mpv.setPropertyString(prop, next.first)
+            next.second
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     fun destroy() {
         try {
             ioScope.cancel()

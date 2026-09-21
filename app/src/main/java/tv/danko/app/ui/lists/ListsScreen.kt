@@ -54,6 +54,8 @@ fun ListsScreen(
     skin: String,
     onSkin: (String) -> Unit,
     onOpen: (String) -> Unit,
+    onVod: (String) -> Unit = {},
+    onSeries: (String) -> Unit = {},
     onAdd: () -> Unit,
 ) {
     val ui by vm.ui.collectAsState()
@@ -92,7 +94,11 @@ fun ListsScreen(
         } else {
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(ui.lists, key = { it.name }) { e ->
-                    ListRow(e, onOpen = { onOpen(e.name) }, onDelete = { showDelete = e.name })
+                    ListRow(
+                        e, onOpen = { onOpen(e.name) },
+                        onVod = { onVod(e.name) }, onSeries = { onSeries(e.name) },
+                        onDelete = { showDelete = e.name },
+                    )
                 }
             }
         }
@@ -119,17 +125,30 @@ fun ListsScreen(
 }
 
 @Composable
-private fun ListRow(e: ListEntity, onOpen: () -> Unit, onDelete: () -> Unit) {
+private fun ListRow(
+    e: ListEntity,
+    onOpen: () -> Unit,
+    onVod: () -> Unit,
+    onSeries: () -> Unit,
+    onDelete: () -> Unit,
+) {
     Card(Modifier.fillMaxWidth().tvFocusBorder().clickable(onClick = onOpen)) {
-        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("📺  ${e.name}", fontWeight = FontWeight.Bold)
-                Text(
-                    "${e.type.uppercase()} · ${e.channelCount} canales",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp,
-                )
+        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("📺  ${e.name}", fontWeight = FontWeight.Bold)
+                    Text(
+                        "${e.type.uppercase()} · ${e.channelCount} canales",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp,
+                    )
+                }
+                TextButton(onClick = onDelete) { Text("🗑") }
             }
-            TextButton(onClick = onDelete) { Text("🗑") }
+            // F6 VOD/series por lista (texto: renderiza en todos lados).
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = onVod) { Text("Películas") }
+                TextButton(onClick = onSeries) { Text("Series") }
+            }
         }
     }
 }

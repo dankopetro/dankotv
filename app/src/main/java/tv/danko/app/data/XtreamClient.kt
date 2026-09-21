@@ -7,7 +7,13 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import tv.danko.app.data.model.Channel
+import tv.danko.app.data.model.Episode
 import tv.danko.app.data.model.LoadResult
+import tv.danko.app.data.model.SeasonInfo
+import tv.danko.app.data.model.SeriesDetail
+import tv.danko.app.data.model.SeriesItem
+import tv.danko.app.data.model.VodCategory
+import tv.danko.app.data.model.VodItem
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -76,6 +82,62 @@ class XtreamClient(
         @SerializedName("start_timestamp") val startTs: String?,
         @SerializedName("stop_timestamp") val stopTs: String?,
     )
+
+    // --- VOD / series (F6). IDs tolerantes: el panel a veces manda String. ---
+    private data class VodCategoryRaw(
+        @SerializedName("category_id") val categoryId: String?,
+        @SerializedName("category_name") val categoryName: String?,
+    )
+
+    private data class VodStreamRaw(
+        @SerializedName("stream_id") val streamId: com.google.gson.JsonElement?,
+        @SerializedName("name") val name: String?,
+        @SerializedName("stream_icon") val streamIcon: String?,
+        @SerializedName("rating") val rating: String?,
+        @SerializedName("category_id") val categoryId: String?,
+        @SerializedName("container_extension") val ext: String?,
+    )
+
+    private data class SeriesEntryRaw(
+        @SerializedName("series_id") val seriesId: com.google.gson.JsonElement?,
+        @SerializedName("name") val name: String?,
+        @SerializedName("cover") val cover: String?,
+        @SerializedName("plot") val plot: String?,
+        @SerializedName("rating") val rating: String?,
+        @SerializedName("category_id") val categoryId: String?,
+    )
+
+    private data class SeriesInfoRaw(
+        val seasons: List<SeasonEntryRaw>?,
+        val episodes: Map<String, List<EpisodeEntryRaw>>?,
+    )
+
+    private data class SeasonEntryRaw(
+        @SerializedName("season_number") val number: com.google.gson.JsonElement?,
+        @SerializedName("name") val name: String?,
+        @SerializedName("cover") val cover: String?,
+    )
+
+    private data class EpisodeEntryRaw(
+        val id: com.google.gson.JsonElement?,
+        @SerializedName("episode_num") val epNum: com.google.gson.JsonElement?,
+        val title: String?,
+        @SerializedName("container_extension") val ext: String?,
+    )
+
+    /** Int tolerante (el panel mezcla números y strings según el campo). */
+    private fun jsonInt(el: com.google.gson.JsonElement?): Int? = try {
+        when {
+            el == null || el.isJsonNull || !el.isJsonPrimitive -> null
+            else -> try {
+                el.asInt
+            } catch (_: Exception) {
+                el.asString.toIntOrNull()
+            }
+        }
+    } catch (_: Exception) {
+        null
+    }
 
     private fun get(url: String, retries: Int = 3, readSecs: Long = 120): String {
         var last: IOException? = null
@@ -203,4 +265,122 @@ class XtreamClient(
             EpgEntry(decodeB64(it.title), decodeB64(it.description), startMs, endMs)
         }
     }
+
+    /** Categorías VOD. */
+    suspend fun getVodCategories(host: String, user: String, pass: String): List<VodCategory> =
+        withContext(Dispatchers.IO) {
+            val h = host.trimEnd('/')
+            gson.fromJson(
+                getApi("$h/player_api.php?username=$user&password=$pass&action=get_vod_categories"),
+                Array<VodCategoryRaw>::class.java,
+            ).toList().mapNotNull {
+                val id = it.categoryId ?: return@mapNotNull null
+                val name = it.categoryName?.trim().orEmpty()
+                if (name.isEmpty()) null else VodCategory(id, name)
+            }
+        }
+
+    /** Películas (opcionalmente de una categoría). */
+    suspend fun getVodStreams(
+        host: String,
+        user: String,
+        pass: String,
+        categoryId: String? = null,
+    ): List<VodItem> = withContext(Dispatchers.IO) {
+        val h = host.trimEnd('/')
+        val cat = if (categoryId != null) "&category_id=$categoryId" else ""
+        gson.fromJson(
+            getApi("$h/player_api.php?username=$user&password=$pass&action=get_vod_streams$cat"),
+            Array<VodStreamRaw>::class.java,
+        ).toList().mapNotNull {
+            val id = jsonInt(it.streamId) ?: return@mapNotNull null
+            val name = it.name?.trim().orEmpty()
+            if (name.isEmpty()) return@mapNotNull null
+            VodItem(
+                id = id, title = name, icon = it.streamIcon.orEmpty(),
+                rating = it.rating.orEmpty(), catId = it.categoryId.orEmpty(),
+                ext = it.ext?.trim().orEmpty().ifEmpty { "mp4" },
+            )
+        }
+    }
+
+    /** Categorías de series. */
+    suspend fun getSeriesCategories(host: String, user: String, pass: String): List<VodCategory> =
+        withContext(Dispatchers.IO) {
+            val h = host.trimEnd('/')
+            gson.fromJson(
+                getApi("$h/player_api.php?username=$user&password=$pass&action=get_series_categories"),
+                Array<VodCategoryRaw>::class.java,
+            ).toList().mapNotNull {
+                val id = it.categoryId ?: return@mapNotNull null
+                val name = it.categoryName?.trim().orEmpty()
+                if (name.isEmpty()) null else VodCategory(id, name)
+            }
+        }
+
+    /** Series (opcionalmente de una categoría). */
+    suspend fun getSeries(
+        host: String,
+        user: String,
+        pass: String,
+        categoryId: String? = null,
+    ): List<SeriesItem> = withContext(Dispatchers.IO) {
+        val h = host.trimEnd('/')
+        val cat = if (categoryId != null) "&category_id=$categoryId" else ""
+        gson.fromJson(
+            getApi("$h/player_api.php?username=$user&password=$pass&action=get_series$cat"),
+            Array<SeriesEntryRaw>::class.java,
+        ).toList().mapNotNull {
+            val id = jsonInt(it.seriesId) ?: return@mapNotNull null
+            val name = it.name?.trim().orEmpty()
+            if (name.isEmpty()) return@mapNotNull null
+            SeriesItem(
+                id = id, title = name, cover = it.cover.orEmpty(),
+                plot = it.plot.orEmpty(), rating = it.rating.orEmpty(),
+            )
+        }
+    }
+
+    /** Temporadas + episodios de una serie. */
+    suspend fun getSeriesDetail(
+        host: String,
+        user: String,
+        pass: String,
+        seriesId: Int,
+    ): SeriesDetail = withContext(Dispatchers.IO) {
+        val h = host.trimEnd('/')
+        val info = gson.fromJson(
+            getApi("$h/player_api.php?username=$user&password=$pass&action=get_series_info&series_id=$seriesId"),
+            SeriesInfoRaw::class.java,
+        )
+        val seasons = (info.seasons ?: emptyList()).mapNotNull {
+            val n = jsonInt(it.number) ?: return@mapNotNull null
+            SeasonInfo(n, it.name.orEmpty(), it.cover.orEmpty())
+        }.sortedBy { it.number }
+        val episodes = (info.episodes ?: emptyMap()).flatMap { (season, list) ->
+            val sn = season.toIntOrNull() ?: return@flatMap emptyList()
+            list.mapNotNull {
+                val id = jsonInt(it.id) ?: return@mapNotNull null
+                Episode(
+                    id = id, season = sn,
+                    epNum = jsonInt(it.epNum) ?: 0,
+                    title = it.title?.trim().orEmpty(),
+                    ext = it.ext?.trim().orEmpty().ifEmpty { "mp4" },
+                )
+            }
+        }.sortedWith(compareBy({ it.season }, { it.epNum }))
+        SeriesDetail(seasons, episodes)
+    }
+}
+
+/** URL de reproducción de una película (port del stream_url de xtream.py). */
+fun vodUrl(host: String, user: String, pass: String, id: Int, ext: String): String {
+    val e = ext.trim().ifEmpty { "mp4" }
+    return "${host.trimEnd('/')}/movie/$user/$pass/$id.$e"
+}
+
+/** URL de reproducción de un episodio de serie. */
+fun episodeUrl(host: String, user: String, pass: String, id: Int, ext: String): String {
+    val e = ext.trim().ifEmpty { "mp4" }
+    return "${host.trimEnd('/')}/series/$user/$pass/$id.$e"
 }

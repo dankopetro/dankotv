@@ -29,3 +29,36 @@ data class LoadResult(
     val groups: List<String>,
     val epgUrl: String = "",
 )
+
+/** Categoría VOD/series. */
+data class VodCategory(val id: String, val name: String)
+
+/** Película VOD. */
+data class VodItem(
+    val id: Int,
+    val title: String,
+    val icon: String = "",
+    val rating: String = "",
+    val catId: String = "",
+    val ext: String = "mp4",
+)
+
+/** Serie. */
+data class SeriesItem(
+    val id: Int,
+    val title: String,
+    val cover: String = "",
+    val plot: String = "",
+    val rating: String = "",
+)
+
+/** Temporada + episodios. */
+data class SeasonInfo(val number: Int, val name: String = "", val cover: String = "")
+data class Episode(
+    val id: Int,
+    val season: Int,
+    val epNum: Int,
+    val title: String = "",
+    val ext: String = "mp4",
+)
+data class SeriesDetail(val seasons: List<SeasonInfo>, val episodes: List<Episode>)

@@ -160,6 +160,8 @@ fun DankoNav(
                 vm = vm, skin = skin,
                 onSkin = { name -> scope.launch { container.settings.setSkin(name) } },
                 onOpen = { nav.navigate("channels/${Uri.encode(it)}") },
+                onVod = { nav.navigate("vod/${Uri.encode(it)}") },
+                onSeries = { nav.navigate("series/${Uri.encode(it)}") },
                 onAdd = { showAdd = true },
             )
             if (showAdd) {
@@ -205,8 +207,7 @@ fun DankoNav(
             )
         }
         composable(
-            "guide/{name}/{group}",
-            arguments = listOf(
+            "guide/{name}/{group}",            arguments = listOf(
                 navArgument("name") { type = NavType.StringType },
                 navArgument("group") { type = NavType.StringType },
             ),
@@ -225,6 +226,42 @@ fun DankoNav(
                 onBack = {
                     if (!nav.popBackStack()) {
                         nav.navigate("channels/${Uri.encode(name)}")
+                    }
+                },
+            )
+        }
+        composable(
+            "vod/{name}",
+            arguments = listOf(navArgument("name") { type = NavType.StringType }),
+        ) { back ->
+            val name = Uri.decode(back.arguments?.getString("name") ?: "")
+            tv.danko.app.ui.vod.VodScreen(
+                listName = name,
+                vod = container.vod,
+                onPlay = { url, title ->
+                    nav.navigate("player/${Uri.encode(url)}/${Uri.encode(title)}/false/")
+                },
+                onBack = {
+                    if (!nav.popBackStack()) {
+                        nav.navigate("lists")
+                    }
+                },
+            )
+        }
+        composable(
+            "series/{name}",
+            arguments = listOf(navArgument("name") { type = NavType.StringType }),
+        ) { back ->
+            val name = Uri.decode(back.arguments?.getString("name") ?: "")
+            tv.danko.app.ui.vod.SeriesScreen(
+                listName = name,
+                vod = container.vod,
+                onPlay = { url, title ->
+                    nav.navigate("player/${Uri.encode(url)}/${Uri.encode(title)}/false/")
+                },
+                onBack = {
+                    if (!nav.popBackStack()) {
+                        nav.navigate("lists")
                     }
                 },
             )

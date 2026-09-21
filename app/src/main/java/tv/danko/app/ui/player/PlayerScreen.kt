@@ -103,6 +103,20 @@ fun PlayerScreen(
     var controls by remember { mutableStateOf(true) }
     var paused by remember { mutableStateOf(false) }
     var muted by remember { mutableStateOf(false) }
+    // Pistas audio/subs (F6): etiquetas actuales, se ciclan al tocar.
+    var audioLabel by remember { mutableStateOf<String?>(null) }
+    var subLabel by remember { mutableStateOf<String?>(null) }
+    var showAud by remember { mutableStateOf(false) }
+    var showSub by remember { mutableStateOf(false) }
+    LaunchedEffect(state) {
+        if (state is PlayerState.Playing) {
+            try {
+                showAud = player.mediaTracks("audio").size > 1
+                showSub = player.mediaTracks("subtitle").isNotEmpty()
+            } catch (_: Exception) {
+            }
+        }
+    }
     var volume by remember { mutableStateOf(100f) }
     var fullscreen by remember { mutableStateOf(false) }
     var fav by remember { mutableStateOf(false) }
@@ -572,6 +586,32 @@ fun PlayerScreen(
                                 onClick = { muted = player.toggleMute() },
                                 modifier = Modifier.tvFocusBorder(),
                             ) { if (muted) MutedIcon() else MuteIcon() }
+                        }
+                        // Selector de pistas (texto: sin glifos). Solo si hay
+                        // más de una pista o subtítulos disponibles.
+                        if (showAud) {
+                        item {
+                            Button(
+                                onClick = {
+                                    scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                        audioLabel = player.cycleTrack("audio") ?: audioLabel
+                                    }
+                                },
+                                modifier = Modifier.tvFocusBorder(),
+                            ) { Text("AUD" + (audioLabel?.let { ":$it" } ?: "")) }
+                        }
+                        }
+                        if (showSub) {
+                        item {
+                            Button(
+                                onClick = {
+                                    scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                        subLabel = player.cycleTrack("subtitle") ?: subLabel
+                                    }
+                                },
+                                modifier = Modifier.tvFocusBorder(),
+                            ) { Text("SUB" + (subLabel?.let { ":$it" } ?: "")) }
+                        }
                         }
                         item {
                             Button(

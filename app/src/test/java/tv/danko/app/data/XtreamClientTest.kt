@@ -91,4 +91,57 @@ class XtreamClientTest {
         val ua = server.takeRequest().headers["User-Agent"]
         assertEquals(XtreamClient.UA, ua)
     }
+
+    @Test
+    fun vodParseaToleraIdsString() = runTest {
+        server.enqueue(
+            MockResponse(
+                body = """[
+                    {"stream_id": 10, "name": "Peli A", "stream_icon": "http://x/a.png",
+                     "rating": "7.3", "category_id": "5", "container_extension": "mkv"},
+                    {"stream_id": "11", "name": "Peli B", "container_extension": ""},
+                    {"stream_id": null, "name": "Sin id"},
+                    {"stream_id": 12, "name": "  "}
+                ]""",
+            ),
+        )
+        val out = client().getVodStreams(base(), "u", "p")
+        assertEquals(2, out.size)
+        assertEquals(10, out[0].id)
+        assertEquals("mkv", out[0].ext)
+        assertEquals("7.3", out[0].rating)
+        // ext vacía -> mp4 por defecto
+        assertEquals("mp4", out[1].ext)
+    }
+
+    @Test
+    fun seriesInfoAgrupaEpisodiosPorTemporada() = runTest {
+        server.enqueue(
+            MockResponse(
+                body = """{"seasons": [{"season_number": 2, "name": "T2", "cover": "c2"},
+                                       {"season_number": 1, "name": "T1", "cover": "c1"}],
+                         "episodes": {"2": [{"id": "72", "episode_num": 1, "title": "E1", "container_extension": "mp4"}],
+                                      "1": [{"id": 71, "episode_num": 2, "title": "E2", "container_extension": "mkv"},
+                                            {"id": 70, "episode_num": 1, "title": "E1", "container_extension": "mp4"}],
+                                      "X": [{"id": 1, "episode_num": 1, "title": "?", "container_extension": "mp4"}]}}""",
+            ),
+        )
+        val d = client().getSeriesDetail(base(), "u", "p", 124)
+        assertEquals(listOf(1, 2), d.seasons.map { it.number })
+        // Ordenados por temporada y episodio, temporada inválida descartada.
+        assertEquals(listOf(70, 71, 72), d.episodes.map { it.id })
+        assertEquals("mkv", d.episodes[1].ext)
+    }
+
+    @Test
+    fun urlsVodYEpisodios() {
+        assertEquals(
+            "http://h/movie/u/p/10.mkv",
+            vodUrl("http://h/", "u", "p", 10, "mkv"),
+        )
+        assertEquals(
+            "http://h/series/u/p/72.mp4",
+            episodeUrl("http://h", "u", "p", 72, ""),
+        )
+    }
 }
