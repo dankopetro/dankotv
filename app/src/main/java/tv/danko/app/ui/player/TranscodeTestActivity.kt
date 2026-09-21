@@ -24,6 +24,68 @@ class TranscodeTestActivity : Activity() {
         }
         Thread({
             try {
+                if (intent.getStringExtra("mode") == "tracks") {
+                    // Volcado headless de track-list mpv (diagnóstico SUB).
+                    val url = intent.getStringExtra("url") ?: ""
+                    ShareUtils.recLog(this, "SELFTEST-TRACKS: $url")
+                    try {
+                        val mpv = `is`.xyz.mpv.MPV()
+                        mpv.create(this)
+                        mpv.addLogObserver(object : `is`.xyz.mpv.MPV.LogObserver {
+                            override fun logMessage(prefix: String, level: Int, text: String) {
+                                val t = text.trimEnd()
+                                if (t.isEmpty() || level > 30) return
+                                try {
+                                    ShareUtils.recLog(
+                                        this@TranscodeTestActivity,
+                                        "SELFTEST-MPV [$prefix] $t",
+                                    )
+                                } catch (_: Exception) {
+                                }
+                            }
+                        })
+                        mpv.setOptionString("vo", "null")
+                        mpv.setOptionString("ao", "null")
+                        mpv.setOptionString("hwdec", "no")
+                        mpv.setOptionString("user-agent", "libmpv")
+                        mpv.setOptionString("sub-auto", "all")
+                        mpv.command("loadfile", url, "replace")
+                        for (i in 1..6) {
+                            Thread.sleep(3000)
+                            try {
+                                val dur = try {
+                                    mpv.getPropertyDouble("duration")?.toString() ?: "?"
+                                } catch (_: Exception) {
+                                    "?"
+                                }
+                                val node = mpv.getPropertyNode("track-list")
+                                val arr = node as? `is`.xyz.mpv.MPVNode.ArrayNode
+                                val items = arr?.value?.mapNotNull {
+                                    val m = (it as? `is`.xyz.mpv.MPVNode.MapNode)?.value
+                                        ?: return@mapNotNull null
+                                    val t = (m["type"] as? `is`.xyz.mpv.MPVNode.StringNode)?.value
+                                    val id = m["id"]?.toString()
+                                    val lang = (m["lang"] as? `is`.xyz.mpv.MPVNode.StringNode)?.value
+                                    val title = (m["title"] as? `is`.xyz.mpv.MPVNode.StringNode)?.value
+                                    val codec = (m["codec"] as? `is`.xyz.mpv.MPVNode.StringNode)?.value
+                                    "$t/$id/$lang/$title/$codec"
+                                } ?: emptyList()
+                                ShareUtils.recLog(this, "SELFTEST-TRACKS t+${i * 3}s dur=$dur: $items")
+                                if (items.any { it.startsWith("sub/") }) break
+                            } catch (e: Exception) {
+                                ShareUtils.recLog(this, "SELFTEST-TRACKS t+${i * 3}s err: $e")
+                            }
+                        }
+                        try {
+                            mpv.destroy()
+                        } catch (_: Exception) {
+                        }
+                    } catch (e: Exception) {
+                        ShareUtils.recLog(this, "SELFTEST-TRACKS excepción: $e")
+                    }
+                    ShareUtils.recLog(this, "SELFTEST-TRACKS: fin")
+                    return@Thread
+                }
                 if (intent.getStringExtra("mode") == "epg") {
                     val list = intent.getStringExtra("list") ?: ""
                     val urls = (intent.getStringExtra("urls") ?: "").split('|')
