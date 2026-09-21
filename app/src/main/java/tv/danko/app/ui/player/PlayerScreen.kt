@@ -111,6 +111,28 @@ fun PlayerScreen(
     var subLabel by remember { mutableStateOf<String?>(null) }
     var showAud by remember { mutableStateOf(false) }
     var showSub by remember { mutableStateOf(false) }
+    // Cast (F8): diálogo propio + rutas + sesión activa.
+    var showCast by remember { mutableStateOf(false) }
+    var castRoutes by remember {
+        mutableStateOf<List<androidx.mediarouter.media.MediaRouter.RouteInfo>>(emptyList())
+    }
+    var castActive by remember { mutableStateOf(false) }
+    fun refreshCastRoutes() {
+        try {
+            val router = androidx.mediarouter.media.MediaRouter.getInstance(ctx)
+            val cat = com.google.android.gms.cast.CastMediaControlIntent
+                .categoryForCast("CC1AD845")
+            castRoutes = router.routes.filter {
+                try {
+                    it.isEnabled && it.supportsControlCategory(cat)
+                } catch (_: Exception) {
+                    false
+                }
+            }
+        } catch (_: Exception) {
+            castRoutes = emptyList()
+        }
+    }
     // Sleep timer (F7): apaga al vencer. Se cancela solo al salir.
     var sleepUntil by remember { mutableStateOf(0L) }
     var showSleep by remember { mutableStateOf(false) }
@@ -585,6 +607,7 @@ fun PlayerScreen(
                             if (state !is PlayerState.Playing) return
                             player.setPaused(true)
                             scope.launch { paused = true }
+                            scope.launch { castActive = true }
                             val lower = curUrl.lowercase()
                             val mime = when {
                                 lower.contains(".m3u8") -> "application/x-mpegurl"
@@ -626,6 +649,7 @@ fun PlayerScreen(
                         try {
                             player.setPaused(false)
                             scope.launch { paused = false }
+                            scope.launch { castActive = false }
                         } catch (_: Exception) {
                         }
                     }
@@ -884,17 +908,20 @@ fun PlayerScreen(
                                     contentPadding = ctlPad,
                                 ) { PhotoIcon() }
                             }
-                            // Cast solo-teléfono (F8, caso invitado): al conectar
-                            // pasa lo actual al TV y pausa local; al soltar,
-                            // retoma local. Botón de ruta del sistema.
+                            // Cast solo-teléfono (F8, caso invitado): botón dibujado
+                            // + diálogo propio con la API de rutas. El
+                            // MediaRouteButton del sistema REVIENTA al crearse
+                            // con nuestro tema (background translucent → crash
+                            // al rotar, verificado 21/09). Nada de UI mediarouter.
                             item {
-                                androidx.compose.ui.viewinterop.AndroidView(
-                                    factory = { c ->
-                                        androidx.mediarouter.app.MediaRouteButton(c)
+                                Button(
+                                    onClick = {
+                                        refreshCastRoutes()
+                                        showCast = true
                                     },
-                                    modifier = Modifier.tvFocusBorder()
-                                        .then(if (isLandscape) Modifier.size(32.dp) else Modifier.size(40.dp)),
-                                )
+                                    modifier = Modifier.tvFocusBorder().then(ctlMod),
+                                    contentPadding = ctlPad,
+                                ) { CastIcon() }
                             }
                         }
                         if (hasQueue) {
@@ -936,6 +963,56 @@ fun PlayerScreen(
                     }
                 }
             }
+        }
+        // Diálogo Cast propio (sin UI mediarouter: crashea con el tema).
+        if (showCast) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showCast = false },
+                title = { Text("Enviar a TV", color = Color.White) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (castActive) {
+                            TextButton(
+                                onClick = {
+                                    try {
+                                        com.google.android.gms.cast.framework.CastContext
+                                            .getSharedInstance(ctx).sessionManager
+                                            .endCurrentSession(true)
+                                    } catch (_: Exception) {
+                                    }
+                                    showCast = false
+                                },
+                                modifier = Modifier.fillMaxWidth().tvFocusBorder(),
+                            ) { Text("Desconectar", color = Color.White) }
+                        }
+                        if (castRoutes.isEmpty()) {
+                            Text(
+                                "Sin TVs en la red (mismo Wi-Fi).",
+                                color = Color.White, fontSize = 13.sp,
+                            )
+                        }
+                        castRoutes.forEach { route ->
+                            TextButton(
+                                onClick = {
+                                    try {
+                                        androidx.mediarouter.media.MediaRouter
+                                            .getInstance(ctx).selectRoute(route)
+                                    } catch (_: Exception) {
+                                    }
+                                    showCast = false
+                                },
+                                modifier = Modifier.fillMaxWidth().tvFocusBorder(),
+                            ) {
+                                Text(
+                                    (route.name ?: "TV").toString(), color = Color.White,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {},
+            )
         }
         // Diálogo del sleep timer (TV con D-pad: botones con foco).
         if (showSleep) {
@@ -1174,5 +1251,30 @@ private fun PhotoIcon(tint: Color = LocalContentColor.current) {
         // Lente.
         drawCircle(tint, radius = H * 0.2f, center = Offset(W / 2f, H * 0.59f), style = s)
         drawCircle(tint, radius = H * 0.07f, center = Offset(W / 2f, H * 0.59f))
+    }
+}
+
+/**
+ * Icono Cast dibujado (pantalla + ondas): el MediaRouteButton del sistema
+ * revienta con nuestro tema (crash al rotar 21/09) y los glifos no son
+ * confiables entre teléfonos.
+ */
+@Composable
+private fun CastIcon(tint: Color = LocalContentColor.current) {
+    Canvas(Modifier.size(20.dp)) {
+        val W = size.width
+        val H = size.height
+        val s = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+        // Pantalla.
+        drawRect(
+            tint, Offset(1.dp.toPx(), 1.dp.toPx()),
+            Size(W - 2.dp.toPx(), H - 7.dp.toPx()), style = s,
+        )
+        // Ondas abajo-izquierda + punto.
+        val cx = 5.dp.toPx()
+        val cy = H - 4.dp.toPx()
+        drawArc(tint, -45f, 90f, false, Offset(cx - 5.dp.toPx(), cy - 5.dp.toPx()), Size(10.dp.toPx(), 10.dp.toPx()), style = s)
+        drawArc(tint, -45f, 90f, false, Offset(cx - 8.dp.toPx(), cy - 8.dp.toPx()), Size(16.dp.toPx(), 16.dp.toPx()), style = s)
+        drawCircle(tint, radius = 1.6.dp.toPx(), center = Offset(cx, cy))
     }
 }
