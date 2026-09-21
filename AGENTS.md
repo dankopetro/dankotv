@@ -13,9 +13,14 @@ del proyecto: si una sesión se corta, la próxima arranca desde acá sin perder
 
 - **Carpeta:** `/home/claudio/AndroidStudioProjects/DankoTV` (PROYECTO SEPARADO del repo
   Linux `~/Projects/Dankoiptv`; git local inicializado el 16/09 — ver §12.5).
-- **App:** `tv.danko.app`, versionName `0.1-f3.4`, versionCode 6, instalada en la TV **y**
-  el teléfono. 28 tests JVM verdes.
-- **Fases completas:** F0, F1, F2, F3 (paridad UI) + fixes de escala (344k canales).
+- **App:** `tv.danko.app`, versionName `0.1-f8`, versionCode 46, instalada en la TV **y**
+  el teléfono. 55 tests JVM verdes.
+- **COMPLETA 21/09 (verificado por el usuario):** F4-rec v2 (tag `f4-rec-v2-best`) +
+  F5 EPG (tira+grilla) + F6 VOD/series + AUD/SUB + F7a (logos, aviso conexiones,
+  sleep) + F7 editor + MediaSession + F8 Cast teléfono. Descartaods: catchup,
+  Cast-en-TV, i18n, PIN, grabación en TV, timeshift (en espera).
+- **Pendiente SOLO F9 release:** signingConfig release + App Bundle + GitHub
+  Release — BLOQUEADO hasta que el usuario dé su keystore.
 - **16/09 — sesión "4 problemas del usuario", TODO RESUELTO y verificado en device:**
   1. TV lenta/mala calidad → `mediacodec_embed` directo en TV (framedrop=0, nítido).
   2. Auto-hide controles → 5s (pedido del usuario).
