@@ -61,7 +61,12 @@ class XtreamClient(
     }
 
     private data class AuthResponse(val user_info: UserInfo?)
-    private data class UserInfo(val username: String?, val password: String?)
+    private data class UserInfo(
+        val username: String?,
+        val password: String?,
+        @SerializedName("active_cons") val activeCons: com.google.gson.JsonElement? = null,
+        @SerializedName("max_connections") val maxConn: com.google.gson.JsonElement? = null,
+    )
     private data class Category(
         @SerializedName("category_id") val categoryId: String?,
         @SerializedName("category_name") val categoryName: String?,
@@ -265,6 +270,22 @@ class XtreamClient(
             EpgEntry(decodeB64(it.title), decodeB64(it.description), startMs, endMs)
         }
     }
+
+    /** Conexiones (activas, máximas) de la cuenta. (0,0) si no se puede saber. */
+    suspend fun connectionUsage(host: String, user: String, pass: String): Pair<Int, Int> =
+        withContext(Dispatchers.IO) {
+            try {
+                val h = host.trimEnd('/')
+                val auth = gson.fromJson(
+                    getApi("$h/player_api.php?username=$user&password=$pass"),
+                    AuthResponse::class.java,
+                )
+                (jsonInt(auth.user_info?.activeCons) ?: 0) to
+                    (jsonInt(auth.user_info?.maxConn) ?: 0)
+            } catch (_: Exception) {
+                0 to 0
+            }
+        }
 
     /** Categorías VOD. */
     suspend fun getVodCategories(host: String, user: String, pass: String): List<VodCategory> =

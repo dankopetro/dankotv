@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -147,11 +148,27 @@ private fun GuideRow(
             .clickable(onClick = onPlay)
             .padding(8.dp),
     ) {
-        Text(
-            ch.title, fontWeight = FontWeight.Bold, fontSize = 14.sp,
-            color = Color.White,
-            maxLines = 1, overflow = TextOverflow.Ellipsis,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (ch.logo.isNotEmpty()) {
+                coil.compose.AsyncImage(
+                    model = ch.logo,
+                    contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                    modifier = Modifier.size(32.dp)
+                        .background(
+                            MaterialTheme.colorScheme.surfaceVariant,
+                            MaterialTheme.shapes.small,
+                        ),
+                )
+                androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
+            }
+            Text(
+                ch.title, fontWeight = FontWeight.Bold, fontSize = 14.sp,
+                color = Color.White,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        }
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.fillMaxWidth().padding(top = 6.dp),

@@ -166,6 +166,11 @@ Puntos de paridad con Linux (mismos nombres/conceptos a propósito):
 `SettingsStore`↔config.py · `ChannelsScreen`↔mainview.py sin video · `ListsScreen`↔home.py ·
 `DANKO_SKINS`↔skins.py · `DISPLAY_LIMIT=2000`↔mainview.py.
 
+**Android VA ADELANTE del shell Linux** (anotado 21/09 a pedido del usuario):
+el shell `dankotv/` 0.1 NO tiene guía EPG ni selector de audio/subs; Android
+sí (F5 tira+grilla, F6 botones AUD/SUB). Si se portan al shell, mirar
+`EpgRepository`/`GuideScreen` y `mediaTracks`/`cycleTrack` de acá.
+
 ---
 
 ## 4. Dispositivos y adb (el usuario AUTORIZÓ a entrar por adb a la TV y al teléfono para ver cómo funciona)

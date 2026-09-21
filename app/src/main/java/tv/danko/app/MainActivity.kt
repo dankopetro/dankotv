@@ -118,6 +118,35 @@ fun DankoNav(
     // Cola compartida: la llena ChannelsScreen al reproducir y la usa el
     // player para prev/next/favorito (self.filtered + _playing_idx en Linux).
     val playQueue = remember { tv.danko.app.ui.player.PlayQueue(container.repo) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    // Aviso de límite de conexiones (F7): la cuenta del usuario tiene máx 3.
+    // Si ya están todas ocupadas, el stream nuevo puede tumbar otro.
+    fun warnConnections(listName: String) {
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val spec = container.repo.specOf(listName) ?: return@launch
+                val creds = when (spec) {
+                    is tv.danko.app.data.model.PlaylistSpec.Xtream ->
+                        Triple(spec.host, spec.user, spec.pass)
+                    is tv.danko.app.data.model.PlaylistSpec.M3u ->
+                        tv.danko.app.data.xtreamCredsFromM3uUrl(spec.url) ?: return@launch
+                }
+                val (active, max) = container.xtream.connectionUsage(creds.first, creds.second, creds.third)
+                if (max > 0 && active >= max) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        try {
+                            android.widget.Toast.makeText(
+                                ctx, "Límite de conexiones ($active/$max): puede cortarse",
+                                android.widget.Toast.LENGTH_LONG,
+                            ).show()
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+            }
+        }
+    }
     // Arranque SIEMPRE en "Mis listas" (decisión del usuario 13/09, como
     // app.py que abre Home; si no hay listas, el diálogo se auto-abre abajo).
     // OJO: no auto-navegar con last_list — si channels quedara como start,
@@ -192,6 +221,7 @@ fun DankoNav(
                 onSkin = { name2 -> scope.launch { container.settings.setSkin(name2) } },
                 onPlay = { ch, list ->
                     playQueue.set(name, list, list.indexOf(ch))
+                    warnConnections(name)
                     nav.navigate("player/${Uri.encode(ch.url)}/${Uri.encode(ch.title)}/true/")
                 },
                 onGuide = { group ->
@@ -207,7 +237,8 @@ fun DankoNav(
             )
         }
         composable(
-            "guide/{name}/{group}",            arguments = listOf(
+            "guide/{name}/{group}",
+            arguments = listOf(
                 navArgument("name") { type = NavType.StringType },
                 navArgument("group") { type = NavType.StringType },
             ),
@@ -221,6 +252,7 @@ fun DankoNav(
                 epg = container.epg,
                 onPlay = { ch, list ->
                     playQueue.set(name, list, list.indexOf(ch))
+                    warnConnections(name)
                     nav.navigate("player/${Uri.encode(ch.url)}/${Uri.encode(ch.title)}/true/")
                 },
                 onBack = {
@@ -239,6 +271,7 @@ fun DankoNav(
                 listName = name,
                 vod = container.vod,
                 onPlay = { url, title ->
+                    warnConnections(name)
                     nav.navigate("player/${Uri.encode(url)}/${Uri.encode(title)}/false/")
                 },
                 onBack = {
@@ -257,6 +290,7 @@ fun DankoNav(
                 listName = name,
                 vod = container.vod,
                 onPlay = { url, title ->
+                    warnConnections(name)
                     nav.navigate("player/${Uri.encode(url)}/${Uri.encode(title)}/false/")
                 },
                 onBack = {

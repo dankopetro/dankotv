@@ -144,4 +144,21 @@ class XtreamClientTest {
             episodeUrl("http://h", "u", "p", 72, ""),
         )
     }
+
+    @Test
+    fun conexionesActivasYMaximo() = runTest {
+        server.enqueue(
+            MockResponse(
+                body = """{"user_info": {"username": "u", "password": "p",
+                    "active_cons": "3", "max_connections": 3}}""",
+            ),
+        )
+        assertEquals(3 to 3, client().connectionUsage(base(), "u", "p"))
+    }
+
+    @Test
+    fun conexionesSinDatosDaCero() = runTest {
+        server.enqueue(MockResponse(body = """{"user_info": {"username": "u"}}"""))
+        assertEquals(0 to 0, client().connectionUsage(base(), "u", "p"))
+    }
 }

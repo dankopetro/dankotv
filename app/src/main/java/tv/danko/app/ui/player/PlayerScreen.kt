@@ -108,6 +108,9 @@ fun PlayerScreen(
     var subLabel by remember { mutableStateOf<String?>(null) }
     var showAud by remember { mutableStateOf(false) }
     var showSub by remember { mutableStateOf(false) }
+    // Sleep timer (F7): apaga al vencer. Se cancela solo al salir.
+    var sleepUntil by remember { mutableStateOf(0L) }
+    var showSleep by remember { mutableStateOf(false) }
     LaunchedEffect(state) {
         if (state is PlayerState.Playing) {
             // Las pistas (sobre todo subtítulos en mkv por red) pueden llegar
@@ -474,6 +477,14 @@ fun PlayerScreen(
         onClose()
     }
 
+    LaunchedEffect(sleepUntil) {
+        if (sleepUntil > 0) {
+            val wait = sleepUntil - android.os.SystemClock.uptimeMillis()
+            if (wait > 0) kotlinx.coroutines.delay(wait)
+            closePlayer()
+        }
+    }
+
     val label = when (val s = state) {
         PlayerState.Idle -> "Detenido"
         PlayerState.Loading -> "Cargando…"
@@ -626,6 +637,13 @@ fun PlayerScreen(
                                 modifier = Modifier.tvFocusBorder(),
                             ) { FullscreenIcon() }
                         }
+                        // Sleep timer (texto, TV y teléfono).
+                        item {
+                            Button(
+                                onClick = { showSleep = true },
+                                modifier = Modifier.tvFocusBorder(),
+                            ) { Text(if (sleepUntil > 0) "Sleep ON" else "Sleep") }
+                        }
                         // Zoom llenar/ajustar (SOLO landscape no-TV): recorta
                         // arriba/abajo sin deformar, estilo VLC. En TV no va
                         // (surface 16:9 + embed ignora zoom).
@@ -700,6 +718,36 @@ fun PlayerScreen(
                     }
                 }
             }
+        }
+        // Diálogo del sleep timer (TV con D-pad: botones con foco).
+        if (showSleep) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showSleep = false },
+                title = { Text("Apagar en…", color = Color.White) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf(0, 15, 30, 60, 90).forEach { min ->
+                            TextButton(
+                                onClick = {
+                                    sleepUntil = if (min == 0) {
+                                        0L
+                                    } else {
+                                        android.os.SystemClock.uptimeMillis() + min * 60_000L
+                                    }
+                                    showSleep = false
+                                },
+                                modifier = Modifier.fillMaxWidth().tvFocusBorder(),
+                            ) {
+                                Text(
+                                    if (min == 0) "Desactivado" else "$min minutos",
+                                    color = Color.White,
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {},
+            )
         }
     }
 }

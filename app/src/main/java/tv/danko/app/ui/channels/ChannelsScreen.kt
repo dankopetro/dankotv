@@ -1,12 +1,14 @@
 package tv.danko.app.ui.channels
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -149,6 +151,20 @@ private fun ChannelRow(
 ) {
     Card(modifier.fillMaxWidth().tvFocusBorder().clickable(onClick = onPlay)) {
         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Logo del canal (F7): Coil con caché; sin logo no ocupa lugar.
+            if (ch.logo.isNotEmpty()) {
+                coil.compose.AsyncImage(
+                    model = ch.logo,
+                    contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                    modifier = Modifier.size(40.dp)
+                        .background(
+                            MaterialTheme.colorScheme.surfaceVariant,
+                            MaterialTheme.shapes.small,
+                        ),
+                )
+                androidx.compose.foundation.layout.Spacer(Modifier.size(10.dp))
+            }
             Column(Modifier.weight(1f)) {
                 Text(
                     ch.title,
