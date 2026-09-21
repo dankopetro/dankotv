@@ -331,8 +331,12 @@ máx 3 conexiones). Comparativa completa Linux-vs-Android hecha el 16/09.
   (caso invitado: castear a TV ajena en la misma red; la TCL ya tiene la app,
   no se justifica en TV). Timeshift en espera (complejo, solo si se pide).
   Grabación en TV: ELIMINADA 21/09 a pedido del usuario (no debe ir).
-- **F9 release**: signingConfig release (keystore del usuario), App Bundle,
-  GitHub Release. DESCARTADOS 17/09: catchup, i18n, PIN parental.
+- **F9 release**: signingConfig release + App Bundle ✅ HECHO 21/09
+  (`app-release.aab` firmado). Keystore JKS en `~/.keystores/
+  dankotv-release.jks` + claves en `~/.gradle/gradle.properties` (AMBOS
+  FUERA del repo: nunca commitear). OJO: keytool moderno genera PKCS12 que
+  BundleTool NO puede leer ("bad key during decryption") → regenerar con
+  `-storetype JKS`. Falta solo SUBIRLO (cuenta Play Console del usuario).
 
 ---
 
