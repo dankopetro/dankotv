@@ -117,6 +117,57 @@ fun PlayerScreen(
         mutableStateOf<List<androidx.mediarouter.media.MediaRouter.RouteInfo>>(emptyList())
     }
     var castActive by remember { mutableStateOf(false) }
+    // El descubrimiento mDNS es ASÍNCRONO: una foto al abrir no alcanza
+    // (bug 21/09: "no hay nada en la red" con la TV anunciando). Callback
+    // vivo mientras el diálogo está abierto.
+    val castCallback = remember {
+        object : androidx.mediarouter.media.MediaRouter.Callback() {
+            private fun sync() {
+                refreshCastRoutes()
+            }
+            override fun onRouteAdded(
+                router: androidx.mediarouter.media.MediaRouter?,
+                route: androidx.mediarouter.media.MediaRouter.RouteInfo?,
+            ) = sync()
+            override fun onRouteRemoved(
+                router: androidx.mediarouter.media.MediaRouter?,
+                route: androidx.mediarouter.media.MediaRouter.RouteInfo?,
+            ) = sync()
+            override fun onRouteChanged(
+                router: androidx.mediarouter.media.MediaRouter?,
+                route: androidx.mediarouter.media.MediaRouter.RouteInfo?,
+            ) = sync()
+        }
+    }
+    DisposableEffect(showCast) {
+        var router: androidx.mediarouter.media.MediaRouter? = null
+        if (showCast) {
+            try {
+                router = androidx.mediarouter.media.MediaRouter.getInstance(ctx)
+                val selector = androidx.mediarouter.media.MediaRouteSelector.Builder()
+                    .addControlCategory(
+                        com.google.android.gms.cast.CastMediaControlIntent
+                            .categoryForCast("CC1AD845"),
+                    )
+                    .addControlCategory(
+                        androidx.mediarouter.media.MediaControlIntent.CATEGORY_LIVE_VIDEO,
+                    )
+                    .build()
+                router?.addCallback(
+                    selector, castCallback,
+                    androidx.mediarouter.media.MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY,
+                )
+                refreshCastRoutes()
+            } catch (_: Exception) {
+            }
+        }
+        onDispose {
+            try {
+                router?.removeCallback(castCallback)
+            } catch (_: Exception) {
+            }
+        }
+    }
     fun refreshCastRoutes() {
         try {
             val router = androidx.mediarouter.media.MediaRouter.getInstance(ctx)
