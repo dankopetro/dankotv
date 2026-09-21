@@ -1,6 +1,5 @@
 package tv.danko.app.ui.lists
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -146,7 +145,7 @@ private fun ListRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    Card(Modifier.fillMaxWidth().tvFocusBorder().clickable(onClick = onOpen)) {
+    Card(Modifier.fillMaxWidth().tvFocusBorder()) {
         Column(Modifier.fillMaxWidth().padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -158,8 +157,12 @@ private fun ListRow(
                 }
                 TextButton(onClick = onDelete) { Text("🗑") }
             }
-            // F6 VOD/series por lista (texto: renderiza en todos lados).
+            // F6 VOD/series por lista + editor (texto: renderiza en todos
+            // lados). Sin clickable anidado: en TV el foco salta de tarjeta
+            // en tarjeta y los botones quedan inalcanzables (bug 21/09).
+            // "Abrir" es el botón primario (también touch).
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Button(onClick = onOpen) { Text("Abrir") }
                 TextButton(onClick = onVod) { Text("Películas") }
                 TextButton(onClick = onSeries) { Text("Series") }
                 TextButton(onClick = onEdit) { Text("Editar") }

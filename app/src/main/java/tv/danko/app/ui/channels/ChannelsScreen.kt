@@ -1,6 +1,5 @@
 package tv.danko.app.ui.channels
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -116,6 +115,12 @@ fun ChannelsScreen(
                     selected = ui.group == g,
                     onClick = { vm.setGroup(g) },
                     label = { Text(g, maxLines = 1) },
+                    // Seleccionado BIEN visible en TV (el default con este
+                    // tema casi no se distingue — bug 21/09).
+                    colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
                 )
             }
         }
@@ -153,7 +158,7 @@ private fun ChannelRow(
     hideLabel: String,
     modifier: Modifier = Modifier,
 ) {
-    Card(modifier.fillMaxWidth().tvFocusBorder().clickable(onClick = onPlay)) {
+    Card(modifier.fillMaxWidth().tvFocusBorder()) {
         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             // Logo del canal (F7): Coil con caché; sin logo no ocupa lugar.
             if (ch.logo.isNotEmpty()) {
@@ -176,6 +181,9 @@ private fun ChannelRow(
                 )
                 Text(ch.group, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
             }
+            // Sin clickable anidado (igual que ListRow, bug TV 21/09): "Ver"
+            // es el botón primario para D-pad y touch.
+            TextButton(onClick = onPlay) { Text("Ver") }
             // Estrella dibujada (el glifo ★/☆ no renderiza en algunos
             // teléfonos — mismo caso que el botón fav del player).
             IconButton(onClick = onFav) {

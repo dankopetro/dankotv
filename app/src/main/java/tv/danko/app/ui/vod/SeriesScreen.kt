@@ -126,6 +126,10 @@ fun SeriesScreen(
                         selected = selCat == c.id,
                         onClick = { selCat = c.id },
                         label = { Text(c.name, maxLines = 1) },
+                        colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                        ),
                     )
                 }
             }
