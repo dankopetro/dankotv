@@ -30,6 +30,20 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+    // Firma release (F9): keystore fuera del repo (~/.keystores/ + claves en
+    // ~/.gradle/gradle.properties). Sin esas props compila igual sin firmar.
+    def ksProps = ["DANKOTV_STORE_FILE", "DANKOTV_STORE_PASSWORD", "DANKOTV_KEY_ALIAS", "DANKOTV_KEY_PASSWORD"]
+    if (ksProps.every { project.hasProperty(it) || System.getenv(it) != null }) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(project.property("DANKOTV_STORE_FILE"))
+                storePassword = project.property("DANKOTV_STORE_PASSWORD")
+                keyAlias = project.property("DANKOTV_KEY_ALIAS")
+                keyPassword = project.property("DANKOTV_KEY_PASSWORD")
+            }
+        }
+        buildTypes.release.signingConfig = signingConfigs.getByName("release")
+    }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17

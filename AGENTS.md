@@ -16,8 +16,8 @@ del proyecto: si una sesión se corta, la próxima arranca desde acá sin perder
 - **App:** `tv.danko.app`, versionName `0.1-f8`, versionCode 46, instalada en la TV **y**
   el teléfono. 55 tests JVM verdes.
 - **COMPLETA 21/09 (verificado por el usuario):** F4-rec v2 (tag `f4-rec-v2-best`) +
-  F5 EPG (tira+grilla) + F6 VOD/series + AUD/SUB + F7a (logos, aviso conexiones,
-  sleep) + F7 editor + MediaSession + F8 Cast teléfono. Descartaods: catchup,
+  F5 EPG (tira+grilla) +   F6 VOD/series + AUD/SUB + F7a (logos, aviso conexiones,
+  sleep) + F7 editor + MediaSession + F8 Cast teléfono. Descartados: catchup,
   Cast-en-TV, i18n, PIN, grabación en TV, timeshift (en espera).
 - **Pendiente SOLO F9 release:** signingConfig release + App Bundle + GitHub
   Release — BLOQUEADO hasta que el usuario dé su keystore.
