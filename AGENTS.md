@@ -13,11 +13,12 @@ del proyecto: si una sesión se corta, la próxima arranca desde acá sin perder
 
 - **Carpeta:** `/home/claudio/AndroidStudioProjects/DankoTV` (PROYECTO SEPARADO del repo
   Linux `~/Projects/Dankoiptv`; git local inicializado el 16/09 — ver §12.5).
-- **App:** `tv.danko.app`, versionName `0.1-f8`, versionCode 46, instalada en la TV **y**
-  el teléfono. 55 tests JVM verdes.
+- **App:** `tv.danko.app`, TV en debug vc51 / teléfono en release 1.0 (vc47,
+  distinta firma: debug NO instala sobre release sin borrar). 56 tests JVM verdes.
 - **COMPLETA 21/09 (verificado por el usuario):** F4-rec v2 (tag `f4-rec-v2-best`) +
   F5 EPG (tira+grilla) +   F6 VOD/series + AUD/SUB + F7a (logos, aviso conexiones,
-  sleep) + F7 editor + MediaSession + F8 Cast teléfono. Descartados: catchup,
+  sleep) + F7 editor + MediaSession + F8 Cast teléfono + buscador de categorías.
+  Descartados: catchup,
   Cast-en-TV, i18n, PIN, grabación en TV, timeshift (en espera).
 - **Pendiente SOLO F9 release:** signingConfig release + App Bundle + GitHub
   Release — BLOQUEADO hasta que el usuario dé su keystore.
@@ -691,6 +692,65 @@ ordena a presentación y el encoder genera PTS limpios. Por eso anda.
   get_live_streams 404 o ids decorativos). La grilla/tira quedan vacías
   PORQUE NO HAY DATOS, no por bug — el pipeline está probado con datos
   reales (self-test EPG: 40 filas). Si aparece una lista con EPG, anda solo.
+
+### 9.17 F6 VOD/series + AUD/SUB (21/09)
+- Endpoints: `get_vod_categories/get_vod_streams/get_series_categories/get_series/
+  get_series_info`. URLs: `/movie/u/p/id.ext` y `/series/u/p/id.ext` (verificado).
+- El panel MEZCLA ints y strings en IDs (`episode_num: 1` pero `id: "61041"`):
+  Gson estricto revienta → todos los IDs se leen como JsonElement + helper
+  `jsonInt()` tolerante (test con JSON mixto).
+- mpv llama al tipo subtítulo **`sub`**, NO `subtitle`: filtrar por "subtitle"
+  descartaba TODO y el botón SUB nunca salía (bug real, diagnosticado por
+  logcat `tracks subtitle: 0` con el video correcto abierto).
+- Pistas por red llegan TARDE (post `file-loaded`): re-query a 0s/4s/8s en
+  PlayerScreen; botones AUD/SUB solo visibles si hay qué cambiar.
+- Sonda mpv headless (vo=null) NO sirve para diagnosticar tracks: sin surface
+  libmpv ni abre el archivo (track-list vacía siempre). No perder tiempo ahí.
+- Coil 2.6.0 para posters + logos (una sola dependencia cubre F6 y F7-logos).
+
+### 9.18 F7a + editor + MediaSession (21/09)
+- Aviso conexiones: `user_info.active_cons/max_connections` (strings o ints);
+  la cuenta del usuario tiene máx 3 → toast si `active >= max` antes de
+  reproducir (canales, guía, VOD y series).
+- Editor: renombrar toca lists+channels+favorites+last_list (transacción);
+  ocultar = columna `hidden` (migración v4→v5) filtrada en TODO browse menos
+  favoritos (elección explícita); grupo "Ocultos" para recuperar.
+- Recarga ATÓMICA M3U (bug real 19/09: un reload fallido dejó 0 canales):
+  descargar a `nombre__staging` + swap en transacción; si falla, lo viejo
+  intacto + toast "No se pudo recargar". Xtream ya era atómico (clear+insert
+  en transacción tras descargar a RAM).
+- MediaSession plataforma (sin deps): play/pausa/stop + remote/auris;
+  sincronizar estado `paused` de vuelta a la UI o el botón miente.
+- Sleep timer: `LaunchedEffect(deadline)` + `closePlayer()`; se cancela solo.
+
+### 9.19 F8 Cast solo-teléfono (21/09)
+- `MediaRouteButton` del sistema CRASHEA al crearse con nuestro tema
+  (`background can not be translucent`, solo al rotar porque en vertical el
+  item queda fuera de pantalla en LazyRow). Reemplazo: botón dibujado +
+  diálogo propio con API MediaRouter (nada de UI mediarouter).
+- Descubrimiento mDNS es ASÍNCRONO: foto única al abrir sale vacía;
+  `MediaRouter.Callback` vivo + `CALLBACK_FLAG_REQUEST_DISCOVERY`.
+- El receptor default NO reproduce `.ts` en vivo (TV gira eternamente):
+  mapear a variante HLS `host/live/user/pass/id.m3u8` (`castStreamUrl()`,
+  solo vivo Xtream con id numérico; VOD/m3u8 pasan igual). Test JVM.
+- Fallos con toast real: `RemoteMediaClient` vive en paquete
+  `framework.media` (NO en `cast`); escuchar `onStatusUpdated` IDLE+ERROR.
+  Firmas `SessionManagerListener<Session>` (base, no CastSession) + los 9
+  métodos (falta uno y no compila).
+- Diseño Chromecast: el teléfono solo manda la URL, la TV reproduce sola
+  (cerrar la app o stop local NO paran la TV; se para con Desconectar).
+
+### 9.20 Listas por adb + send-list.sh (19-21/09)
+- `send-list.sh "URL" "Nombre" phone|tv|both`: interactivo a prueba de tontos
+  (pregunta URL/nombre/destino, valida HTTP 200, confirma, espera con timeout).
+  Usa backdoor `add_list_name/add_list_url` (+ force-stop previo: el intent en
+  caliente a veces no dispara). NO tocar devices mientras corre.
+- Release NO es debugeable: `run-as` bloqueado → sin cirugía DB directa.
+  `adb backup/restore` artesanal NO funcionó (lista vacía); recargar por
+  backdoor sí (lento: 342k canales ≈ 10 min).
+- Debug NO instala sobre release (firma distinta): o se queda release en
+  teléfono + debug en TV, o wipe total. De acá en más, updates con MISMA
+  firma instalan directo sin borrar.
 ---
 
 ## 10. Proyecto viejo `/home/claudio/AndroidStudioProjects/DankoIPTV` (com.danko.iptv)
