@@ -301,4 +301,20 @@ class ViewModelsTest {
         assertTrue(msg!!.contains("9 canales"))
         assertTrue(vm.ui.value.lists.isEmpty()) // no guarda
     }
+
+    @Test
+    fun filterGroupsFiltraYNormaliza(): Unit = runBlocking {
+        val gs = listOf("Todas", "Deportes", "DEPORTES VIP", "Noticias")
+        assertEquals(gs, tv.danko.app.ui.channels.filterGroups(gs, ""))
+        assertEquals(gs, tv.danko.app.ui.channels.filterGroups(gs, "   "))
+        assertEquals(
+            listOf("Deportes", "DEPORTES VIP"),
+            tv.danko.app.ui.channels.filterGroups(gs, "depor"),
+        )
+        assertEquals(
+            listOf("DEPORTES VIP"),
+            tv.danko.app.ui.channels.filterGroups(gs, "VIP"),
+        )
+        assertTrue(tv.danko.app.ui.channels.filterGroups(gs, "zzz").isEmpty())
+    }
 }

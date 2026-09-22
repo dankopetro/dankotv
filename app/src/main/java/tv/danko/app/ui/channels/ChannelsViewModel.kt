@@ -152,3 +152,13 @@ class ChannelsViewModel(
         const val HID_GROUP = "Ocultos" // pseudo-grupo del editor (texto: sin glifos)
     }
 }
+
+/**
+ * Filtro de grupos/categorías en memoria (F7): son cientos como máximo,
+ * sin SQL. Insensible a mayúsculas; query vacío = todo.
+ */
+fun filterGroups(groups: List<String>, q: String): List<String> {
+    val needle = q.trim()
+    if (needle.isEmpty()) return groups
+    return groups.filter { it.contains(needle, ignoreCase = true) }
+}

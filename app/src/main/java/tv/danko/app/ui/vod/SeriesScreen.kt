@@ -54,6 +54,7 @@ fun SeriesScreen(
 ) {
     var cats by remember { mutableStateOf<List<tv.danko.app.data.model.VodCategory>>(emptyList()) }
     var selCat by remember { mutableStateOf<String?>(null) }
+    var catQuery by remember { mutableStateOf("") }
     var series by remember { mutableStateOf<List<SeriesItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var query by remember { mutableStateOf("") }
@@ -117,11 +118,23 @@ fun SeriesScreen(
             if (loading || detailLoading) CircularProgressIndicator(Modifier.padding(end = 8.dp))
         }
         if (selected == null) {
+            val shownCats = remember(cats, catQuery) {
+                val q = catQuery.trim()
+                if (q.isEmpty()) cats
+                else cats.filter { it.name.contains(q, ignoreCase = true) }
+            }
+            OutlinedTextField(
+                value = catQuery,
+                onValueChange = { catQuery = it },
+                label = { Text("Filtrar categorías…") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
             ) {
-                items(cats, key = { it.id }) { c ->
+                items(shownCats, key = { it.id }) { c ->
                     FilterChip(
                         selected = selCat == c.id,
                         onClick = { selCat = c.id },

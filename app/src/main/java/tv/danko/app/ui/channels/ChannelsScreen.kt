@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -106,11 +107,23 @@ fun ChannelsScreen(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
+        // Buscador de categorías (F7): hay listas con 300+ grupos.
+        var groupQuery by remember { mutableStateOf("") }
+        OutlinedTextField(
+            value = groupQuery,
+            onValueChange = { groupQuery = it },
+            label = { Text("Filtrar grupos…") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        val shownGroups = remember(ui.groups, groupQuery) {
+            filterGroups(ui.groups, groupQuery)
+        }
         // La fila scrollea sola al grupo actual (si no, el seleccionado
         // queda fuera de pantalla y no se sabe dónde se está — bug 21/09).
         val chipsState = androidx.compose.foundation.lazy.rememberLazyListState()
-        LaunchedEffect(ui.group, ui.groups) {
-            val i = ui.groups.indexOf(ui.group)
+        LaunchedEffect(ui.group, shownGroups) {
+            val i = shownGroups.indexOf(ui.group)
             if (i >= 0) {
                 try {
                     chipsState.scrollToItem(i)
@@ -123,7 +136,7 @@ fun ChannelsScreen(
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
             state = chipsState,
         ) {
-            items(ui.groups) { g ->
+            items(shownGroups) { g ->
                 FilterChip(
                     selected = ui.group == g,
                     onClick = { vm.setGroup(g) },
