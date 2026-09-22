@@ -13,8 +13,12 @@ del proyecto: si una sesión se corta, la próxima arranca desde acá sin perder
 
 - **Carpeta:** `/home/claudio/AndroidStudioProjects/DankoTV` (PROYECTO SEPARADO del repo
   Linux `~/Projects/Dankoiptv`; git local inicializado el 16/09 — ver §12.5).
-- **App:** `tv.danko.app`, TV en debug vc51 / teléfono en release 1.0 (vc47,
-  distinta firma: debug NO instala sobre release sin borrar). 56 tests JVM verdes.
+- **App:** `tv.danko.app` 1.0.1 (vc52 release, firmada) en teléfono; TV en debug.
+  56 tests JVM verdes.
+- **REGLA DE ORO 21/09: NUNCA desinstalar para actualizar.** Dos wipes por
+  cambio de firma (debug→release, release→1.0.1) borraron todo dos veces.
+  De acá en más: teléfono SIEMPRE release (misma firma = update directo);
+  TV puede seguir debug. Verificar firma antes de instalar.
 - **COMPLETA 21/09 (verificado por el usuario):** F4-rec v2 (tag `f4-rec-v2-best`) +
   F5 EPG (tira+grilla) +   F6 VOD/series + AUD/SUB + F7a (logos, aviso conexiones,
   sleep) + F7 editor + MediaSession + F8 Cast teléfono + buscador de categorías.
