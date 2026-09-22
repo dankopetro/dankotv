@@ -30,7 +30,7 @@ class EpgTest {
         // Xtream API: host/live/user/pass/123.ts
         assertEquals(28244, streamIdFromUrl("http://h/live/u/p/28244.ts"))
         // M3U estilo Xtream: host/user/pass/12345
-        assertEquals(58287, streamIdFromUrl("http://superxlatino.com:8880/Naty2/xxx/58287"))
+        assertEquals(58287, streamIdFromUrl("http://superxlatino.com:8880/TestUser/xxx/58287"))
         assertNull(streamIdFromUrl("http://h/stream.m3u8"))
         assertNull(streamIdFromUrl(""))
     }
@@ -38,11 +38,11 @@ class EpgTest {
     @Test
     fun credencialesDesdeM3uGetPhp() {
         val (h, u, p) = xtreamCredsFromM3uUrl(
-            "http://superxlatino.com:8880/get.php?username=Naty2&password=tUq3py2tKhhT&type=m3u_plus",
+            "http://superxlatino.com:8880/get.php?username=TestUser&password=TestPass123&type=m3u_plus",
         )!!
         assertEquals("http://superxlatino.com:8880", h)
-        assertEquals("Naty2", u)
-        assertEquals("tUq3py2tKhhT", p)
+        assertEquals("TestUser", u)
+        assertEquals("TestPass123", p)
         assertNull(xtreamCredsFromM3uUrl("http://h/playlist.m3u"))
     }
 

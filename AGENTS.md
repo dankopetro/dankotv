@@ -39,7 +39,7 @@ del proyecto: si una sesión se corta, la próxima arranca desde acá sin perder
      (resample + embed apuraba; usuario confirmó imagen+sonido OK).
   Detalle completo en §9.12.
 - **Lista activa del usuario:** **SuperXL** = `http://superxlatino.com:8880/get.php?
-  username=Naty2&password=tUq3py2tKhhT&type=m3u_plus` (78.200 canales; en el teléfono
+  username=USUARIO&password=CLAVE&type=m3u_plus` (78.200 canales; en el teléfono
   quedó con nombre "dddd"). La vieja "Fenix" (avefenix) sigue en la DB de la TV
   (344k filas, ~70MB): el proveedor sigue caído; OFRECER borrarla para liberar espacio
   (la TV tiene solo 4.2GB y se quedó sin lugar instalando: ver §9.12).
@@ -326,7 +326,7 @@ skin), ListsRepository (`specOf()` reconstruye spec para reload). Tests: 24 JVM 
 (nuevos: FAV_GROUP filtra, reload baja de nuevo del server, last_group persiste).
 
 ### 8.4 Roadmap actualizado (decidido con el usuario 16/09 noche + 17/09 mañana)
-Veredicto de conveniencia 17/09 con DATOS del proveedor (cuenta Naty2:
+Veredicto de conveniencia 17/09 con DATOS del proveedor (cuenta de prueba:
 9.873 VOD, 2.220 series, EPG parcial —82/1970 con ID + XMLTV para match por
 nombre, títulos base64—, logos en 99.9% de canales, 0 canales con catchup,
 máx 3 conexiones). Comparativa completa Linux-vs-Android hecha el 16/09.
@@ -692,8 +692,8 @@ ordena a presentación y el encoder genera PTS limpios. Por eso anda.
 - Grilla: UNA llamada bulk get_live_streams → mapa id→epgId para saber QUÉ
   consultar (probar 40 a ciegas casi nunca pega); si el bulk falla, fallback
   ciego con tope. Solo filas con datos (auto-detección).
-- EPG por proveedor (verificado 19/09): superxlatino/Naty2 SÍ tenía datos
-  (tira probada OK); redworld/cutisaca (reemplazo de dddd), Premium,
+- EPG por proveedor (verificado 19/09): superxlatino (una cuenta de prueba) SÍ tenía datos
+  (tira probada OK); redworld (reemplazo de dddd), Premium,
   Planet y Patricia NO tienen nada (short_epg vacío, xmltv 0 bytes,
   get_live_streams 404 o ids decorativos). La grilla/tira quedan vacías
   PORQUE NO HAY DATOS, no por bug — el pipeline está probado con datos
