@@ -23,39 +23,87 @@ class ListsRepository(
     private val settings: SettingsStore,
     http: OkHttpClient? = null,
     private val xtream: XtreamClient = XtreamClient(http),
+    /** Dir para el temporal de descarga (AppContainer pasa cacheDir; tests usan default). */
+    private val tmpDir: java.io.File? = null,
 ) {
     private val http: OkHttpClient = http ?: OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS) // playlists gigantes (88 MB ~26s)
         .build()
 
-    /** Descarga M3U en STREAMING: parse línea a línea + insert por lotes.
-     *  El camino anterior (body.string() + lista de 344k en RAM) reventaba
-     *  el heap Android (OOM verificado en device). */
-    private fun streamM3uIntoDao(url: String, listName: String): Triple<Int, Int, String> {
+    /** Fase 1 (10/10): baja el cuerpo a un archivo temporal a velocidad de red,
+     *  SIN tocar la base. Leer "a tirones" con inserts interleaved hacía que el
+     *  proveedor cortara la conexión a mitad de la descarga (75 MB de una). */
+    private fun downloadToTemp(url: String): java.io.File {
+        val dir = tmpDir ?: java.io.File(System.getProperty("java.io.tmpdir") ?: "/tmp")
+        if (!dir.isDirectory) dir.mkdirs()
+        val tmp = java.io.File.createTempFile("danko-list-", ".m3u", dir)
         val req = Request.Builder().url(url)
             .header("User-Agent", XtreamClient.UA).build()
-        http.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) throw java.io.IOException("HTTP ${resp.code}")
+        try {
+            http.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) throw java.io.IOException("HTTP ${resp.code}")
+                resp.body!!.byteStream().use { input ->
+                    tmp.outputStream().use { out -> input.copyTo(out) }
+                }
+            }
+        } catch (e: Exception) {
+            try {
+                tmp.delete()
+            } catch (_: Exception) {
+            }
+            throw e
+        }
+        return tmp
+    }
+
+    /** Reintenta solo cortes de red (abort/timeout/reset). Los HTTP 4xx/5xx
+     *  NO se reintentan: se avisa enseguida (regla del usuario 10/10). */
+    private suspend fun downloadToTempRetrying(url: String, attempts: Int = 3): java.io.File {
+        var last: java.io.IOException? = null
+        repeat(attempts) { i ->
+            try {
+                return downloadToTemp(url)
+            } catch (e: java.io.IOException) {
+                if (Regex("HTTP \\d{3}").containsMatchIn(e.message.orEmpty())) throw e
+                last = e
+                if (i + 1 < attempts) kotlinx.coroutines.delay((i + 1) * 2000L)
+            }
+        }
+        throw last!!
+    }
+
+    /** Descarga M3U en DOS FASES: red a archivo temporal (rápido, sin frenadas)
+     *  y después parse + inserts desde el archivo (el socket ya está libre).
+     *  El camino anterior (parse línea a línea con inserts en el callback de
+     *  red) frenaba el socket ~69 veces en listas de 344k y el proveedor
+     *  cortaba a mitad ("Software caused connection abort" verificado 10/10).
+     *  La vía body.string() completa en RAM reventaba el heap (OOM) y no vuelve. */
+    private suspend fun streamM3uIntoDao(url: String, listName: String): Triple<Int, Int, String> {
+        val tmp = downloadToTempRetrying(url)
+        try {
             val groups = java.util.TreeSet<String>()
             var count = 0
             var anyChannel = false
             val batch = ArrayList<ChannelEntity>(5000)
-            val result = M3uParser.parseStreaming(resp.body!!.charStream()) { ch ->
-                anyChannel = true
-                groups.add(ch.group)
-                batch.add(
-                    ChannelEntity(
-                        listName = listName, title = ch.title, group = ch.group,
-                        url = ch.url, logo = ch.logo, epgId = ch.epgId,
-                    ),
-                )
-                count += 1
-                if (batch.size >= 5000) {
-                    val rows = ArrayList(batch)
-                    batch.clear()
-                    // runBlocking OK: corré en Dispatchers.IO (hilo de trabajo)
-                    kotlinx.coroutines.runBlocking { dao.insertChannels(rows) }
+            // Fase 2: parse + inserts desde el archivo (el socket ya está libre;
+            // el runBlocking solo frena lectura de disco, no la red).
+            val result = tmp.bufferedReader().use { reader ->
+                M3uParser.parseStreaming(reader) { ch ->
+                    anyChannel = true
+                    groups.add(ch.group)
+                    batch.add(
+                        ChannelEntity(
+                            listName = listName, title = ch.title, group = ch.group,
+                            url = ch.url, logo = ch.logo, epgId = ch.epgId,
+                        ),
+                    )
+                    count += 1
+                    if (batch.size >= 5000) {
+                        val rows = ArrayList(batch)
+                        batch.clear()
+                        kotlinx.coroutines.runBlocking { dao.insertChannels(rows) }
+                    }
                 }
             }
             if (batch.isNotEmpty()) {
@@ -63,11 +111,34 @@ class ListsRepository(
             }
             if (!anyChannel) throw IllegalArgumentException("Sin canales")
             return Triple(count, groups.size, result.epgUrl)
+        } finally {
+            try {
+                tmp.delete()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    /** Pre-descarga (10/10): si la cuenta ya está al límite, el servidor corta
+     *  la descarga a mitad. Se avisa y no se toca nada (fail-open: si la
+     *  consulta falla, se intenta igual). Vale para alta y recarga, M3U y Xtream. */
+    private suspend fun checkConnections(spec: PlaylistSpec) {
+        val creds = when (spec) {
+            is PlaylistSpec.M3u -> xtreamCredsFromM3uUrl(spec.url)
+            is PlaylistSpec.Xtream -> Triple(spec.host, spec.user, spec.pass)
+        } ?: return
+        val (active, max) = xtream.connectionUsage(creds.first, creds.second, creds.third)
+        if (max > 0 && active >= max) {
+            throw java.io.IOException(
+                "Límite de conexiones ($active/$max): la cuenta está llena; " +
+                    "cerrá otro equipo e intentá de nuevo.",
+            )
         }
     }
 
     suspend fun loadSpec(spec: PlaylistSpec): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
+            checkConnections(spec)
             when (spec) {
                 is PlaylistSpec.M3u -> {
                     // Staging + swap atómico: si la descarga falla a mitad, la
@@ -213,5 +284,39 @@ class ListsRepository(
                     xtream.loadLive(spec.host, spec.user, spec.pass).channels.size
             }
         }
+    }
+}
+
+/** Mensaje amable para fallos de alta/recarga (regla del usuario 10/10 + espejo
+ *  de classify_error en dankotv/engine.py):
+ *  - Si el servidor no da 200 (401/403/429/404/5xx): se avisa y NO se toca nada.
+ *  - hadPrevious=true (recarga): se sigue con los canales guardados en la base.
+ *  - hadPrevious=false (primera vez): no hay nada guardado, se avisa igual. */
+fun loadErrorMessage(err: Throwable?, hadPrevious: Boolean): String {
+    val verb = if (hadPrevious) "recargar" else "cargar"
+    val keep = if (hadPrevious) {
+        "Se mantiene la lista guardada."
+    } else {
+        "Todavía no hay lista guardada."
+    }
+    val s = err?.message.orEmpty()
+    val code = Regex("HTTP (\\d{3})").find(s)?.groupValues?.getOrNull(1)
+    if (code != null) {
+        return when (code) {
+            "401" -> "No se pudo $verb (401: credenciales rechazadas). $keep"
+            "403", "429" -> "No se pudo $verb (HTTP $code: bloqueo temporal del servidor). $keep"
+            "404" -> "No se pudo $verb (404: lista no encontrada). $keep"
+            else -> "No se pudo $verb (HTTP $code). $keep"
+        }
+    }
+    val low = s.lowercase()
+    return when {
+        "límite de conexiones" in low -> "No se pudo $verb (${s.trim()}). $keep"
+        "timeout" in low || "abort" in low || "reset" in low ||
+            "failed to connect" in low || "unable to resolve" in low ||
+            "unreachable" in low || "end of stream" in low ->
+            "No se pudo $verb (corte de red a mitad de descarga). $keep"
+        s.isBlank() -> "No se pudo $verb. $keep"
+        else -> "No se pudo $verb ($s). $keep"
     }
 }

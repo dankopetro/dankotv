@@ -24,7 +24,9 @@ class AppContainer(context: Context) {
     }
     val settings: SettingsStore by lazy { SettingsStore.create(appCtx) }
     val xtream: XtreamClient by lazy { XtreamClient() }
-    val repo: ListsRepository by lazy { ListsRepository(db.playlists(), settings, xtream = xtream) }
+    val repo: ListsRepository by lazy {
+        ListsRepository(db.playlists(), settings, xtream = xtream, tmpDir = appCtx.cacheDir)
+    }
     val epg: EpgRepository by lazy { EpgRepository(db.playlists(), repo, xtream) }
     val vod: VodRepository by lazy { VodRepository(repo, xtream) }
 }

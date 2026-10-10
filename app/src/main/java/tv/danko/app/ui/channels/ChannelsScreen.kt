@@ -79,11 +79,11 @@ fun ChannelsScreen(
             val ctx = LocalContext.current
             TextButton(
                 onClick = {
-                    vm.reload { ok ->
+                    vm.reload { ok, msg ->
                         if (!ok) {
                             try {
                                 android.widget.Toast.makeText(
-                                    ctx, "No se pudo recargar (revisá internet)",
+                                    ctx, msg ?: "No se pudo recargar (revisá internet)",
                                     android.widget.Toast.LENGTH_LONG,
                                 ).show()
                             } catch (_: Exception) {

@@ -5,7 +5,7 @@ fue verificado empíricamente (probado EN DEVICE contra IPTV real) o aprendido p
 propios durante el desarrollo. NO repetir errores ya probados. Este archivo es la MEMORIA
 del proyecto: si una sesión se corta, la próxima arranca desde acá sin perder nada.
 
-Última actualización: 16/09/2026 (sesión "TV lenta + phone landscape + búsqueda": TODO resuelto y verificado en device — 0.1-f3.4)
+Última actualización: 10/10/2026 (sesión "corte mitad descarga": descarga M3U en 2 fases + reintentos + chequeo conexiones + mensajes regla-10/10; PRINCIPAL cargada en TV vía LAN; 58 tests verdes)
 
 ---
 
@@ -757,6 +757,27 @@ ordena a presentación y el encoder genera PTS limpios. Por eso anda.
 - Debug NO instala sobre release (firma distinta): o se queda release en
   teléfono + debug en TV, o wipe total. De acá en más, updates con MISMA
   firma instalan directo sin borrar.
+
+### 9.21 Descarga M3U en 2 fases + regla recarga (10/10, verificado en TV)
+- Causa del "Software caused connection abort" a mitad de descarga (75 MB de una):
+  el parse línea a línea con inserts Room en el callback de red frenaba el socket
+  ~69 veces (lotes de 5000) y el proveedor cortaba al lector lento. Linux no falla
+  porque traga todo de un tirón (`requests.get` sin DB interleaved).
+- Fix vigente (`ListsRepository`): fase 1 baja bytes a temporal en cacheDir a
+  velocidad de red (sin tocar base) + fase 2 parsea/inserta desde el archivo;
+  reintento ×3 solo en cortes de red (HTTP 4xx/5xx NO se reintentan: aviso ya);
+  pre-chequeo de conexiones (fail-open) con error amable si la cuenta está llena.
+- Regla del usuario: recarga con HTTP != 200 → `loadErrorMessage()` avisa el motivo
+  y se sigue con la base guardada (swap atómico ya lo garantizaba); primera vez →
+  mismo aviso + "Todavía no hay lista guardada". Toast en ⟳ + errores de
+  addSpec/saveEdit usan el mismo texto.
+- Proveedor iptvpremium (línea Daikha243): desde la TV daba 401 directo aunque la
+  laptop daba 200 (causa servidor no identificada; slots 2/3→1/3). Workaround que
+  funciona: bajar en laptop + `python3 -m http.server` + mandar URL LAN por backdoor.
+  Así entró PRINCIPAL (269.188 canales) en la TV.
+- Alias `~/.zshrc`: `listatv "Nombre" "URL"` (TV .10) / `listacelu` (celu).
+  OJO zsh escapa `?&= ` al pegar URLs: borrar las `\` o la URL llega rota.
+- 58 tests JVM verdes (incl. `recargaNo200ConservaCanales`, `mensajesRecarga`).
 ---
 
 ## 10. Proyecto viejo `/home/claudio/AndroidStudioProjects/DankoIPTV` (com.danko.iptv)

@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import tv.danko.app.data.ListsRepository
 import tv.danko.app.data.db.ListEntity
+import tv.danko.app.data.loadErrorMessage
 import tv.danko.app.data.model.PlaylistSpec
 
 data class ListsUiState(
@@ -39,16 +40,19 @@ class ListsViewModel(private val repo: ListsRepository) : ViewModel() {
         _ui.value = _ui.value.copy(error = null)
     }
 
-    /** Descarga + guarda (equivale a load_and_store). onDone(true) = abrir. */
+    /** Descarga + guarda (equivale a load_and_store). onDone(true) = abrir.
+     *  Si falla, se avisa y se conserva lo guardado (regla 10/10). */
     fun addSpec(spec: PlaylistSpec, onDone: (Boolean) -> Unit) {
         _ui.value = _ui.value.copy(loading = true, loadingName = spec.name, error = null)
         viewModelScope.launch {
             val r = repo.loadSpec(spec)
+            val listsNow = repo.lists()
+            val had = listsNow.any { it.name == spec.name }
             _ui.value = _ui.value.copy(
                 loading = false,
                 loadingName = "",
-                lists = repo.lists(),
-                error = r.exceptionOrNull()?.let { "No se pudo cargar la lista.\n${it.message}" },
+                lists = listsNow,
+                error = r.exceptionOrNull()?.let { loadErrorMessage(it, had) },
             )
             onDone(r.isSuccess)
         }
@@ -61,16 +65,20 @@ class ListsViewModel(private val repo: ListsRepository) : ViewModel() {
         }
     }
 
-    /** Editor F7: renombra y/o recarga desde el nuevo origen. */
+    /** Editor F7: renombra y/o recarga desde el nuevo origen.
+     *  Si falla, se avisa y se conserva lo guardado (regla 10/10). */
     fun saveEdit(oldName: String, spec: PlaylistSpec, onDone: () -> Unit) {
         _ui.value = _ui.value.copy(loading = true, loadingName = spec.name, error = null)
         viewModelScope.launch {
             val r = repo.updateSpec(oldName, spec)
+            val listsNow = repo.lists()
+            val had = listsNow.any { it.name == spec.name } ||
+                listsNow.any { it.name == oldName }
             _ui.value = _ui.value.copy(
                 loading = false,
                 loadingName = "",
-                lists = repo.lists(),
-                error = r.exceptionOrNull()?.let { "No se pudo guardar.\n${it.message}" },
+                lists = listsNow,
+                error = r.exceptionOrNull()?.let { loadErrorMessage(it, had) },
             )
             onDone()
         }

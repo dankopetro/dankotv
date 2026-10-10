@@ -249,4 +249,35 @@ class ListsRepositoryTest {
         assertEquals("Cine", settings.lastGroup.first())
         assertEquals(30, settings.cacheSecs.first())
     }
+
+    /** Regla 10/10: recarga con HTTP != 200 falla pero conserva los canales viejos. */
+    @Test
+    fun recargaNo200ConservaCanales() = runTest {
+        server.enqueue(MockResponse(body = m3u()))
+        val url = server.url("/lista.m3u").toString()
+        assertTrue(repo.loadSpec(PlaylistSpec.M3u("MiLista", url)).isSuccess)
+        assertEquals(9, dao.channels("MiLista").size)
+
+        repeat(3) { server.enqueue(MockResponse(code = 403)) }
+        val r = repo.loadSpec(PlaylistSpec.M3u("MiLista", url))
+        assertTrue(r.isFailure)
+        // Nada tocado: lista + 9 canales intactos.
+        assertEquals(1, dao.lists().size)
+        assertEquals(9, dao.channels("MiLista").size)
+    }
+
+    /** Regla 10/10: mensajes amables con motivo + qué se conserva. */
+    @Test
+    fun mensajesRecarga() {
+        val m401 = loadErrorMessage(java.io.IOException("HTTP 401"), true)
+        assertTrue(m401.contains("401") && m401.contains("Se mantiene la lista guardada."))
+        val m403 = loadErrorMessage(java.io.IOException("HTTP 403"), true)
+        assertTrue(m403.contains("bloqueo") && m403.contains("Se mantiene la lista guardada."))
+        val mAbort = loadErrorMessage(java.io.IOException("Software caused connection abort"), true)
+        assertTrue(mAbort.contains("corte de red") && mAbort.contains("Se mantiene la lista guardada."))
+        val mPrimera = loadErrorMessage(java.io.IOException("HTTP 404"), false)
+        assertTrue(mPrimera.contains("404") && mPrimera.contains("Todavía no hay lista guardada."))
+        val mLimmite = loadErrorMessage(java.io.IOException("Límite de conexiones (3/3): x"), true)
+        assertTrue(mLimmite.contains("Límite de conexiones"))
+    }
 }

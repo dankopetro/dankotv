@@ -255,7 +255,7 @@ class ViewModelsTest {
 
         server.enqueue(MockResponse(body = m3u().replace("HBO", "HBO 2")))
         var reloaded: Boolean? = null
-        vm.reload { reloaded = it }
+        vm.reload { ok, _ -> reloaded = ok }
         awaitTrue { reloaded == true }
         // El título cambió → demostró bajar de nuevo del servidor.
         awaitTrue { vm.ui.value.channels.any { it.title.contains("HBO 2") } }

@@ -125,13 +125,23 @@ class ChannelsViewModel(
         }
     }
 
-    /** Recarga la lista del servidor (reload_list en Linux). */
-    fun reload(onDone: (Boolean) -> Unit = {}) {
+    /** Recarga la lista del servidor (reload_list en Linux).
+     *  Si falla, se avisa con el motivo y se sigue con la base guardada
+     *  (regla 10/10: el swap atómico ya conserva los canales viejos). */
+    fun reload(onDone: (Boolean, String?) -> Unit = { _, _ -> }) {
         viewModelScope.launch {
             _ui.value = _ui.value.copy(loading = true)
             val spec = repo.specOf(listName)
             val res = if (spec == null) null else repo.loadSpec(spec)
             val ok = res?.isSuccess == true
+            val had = repo.lists().any { it.name == listName }
+            val msg = if (ok) {
+                null
+            } else {
+                res?.exceptionOrNull()?.let {
+                    tv.danko.app.data.loadErrorMessage(it, had)
+                } ?: "No se pudo recargar (lista desconocida)."
+            }
             if (!ok) {
                 android.util.Log.w(
                     "DankoTV",
@@ -142,7 +152,7 @@ class ChannelsViewModel(
             val group = if (_ui.value.group in groups) _ui.value.group else "Todas"
             _ui.value = _ui.value.copy(loading = false, groups = groups, group = group)
             scheduleFilter(debounceMs = 0)
-            onDone(ok)
+            onDone(ok, msg)
         }
     }
 
