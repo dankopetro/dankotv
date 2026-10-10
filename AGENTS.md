@@ -793,6 +793,12 @@ ordena a presentación y el encoder genera PTS limpios. Por eso anda.
 - uiautomator en la TV es poco fiable: dump solo trae nodos en viewport
   (LazyColumn) y el bridge devuelve "null root node" si la pantalla durmió.
   No usar dumps como única prueba: logcat + ojo del usuario mandan.
+- Anti-mocha 10/10 (VisCard: 5000 → 1): una transferencia truncada en silencio
+  se importaba como lista mocha con ok. Ahora fase 1 exige Content-Length
+  coincidente (si el servidor lo manda) + cabecera #EXTM3U en los primeros KB;
+  si no, IOException → reintento ×3 → aviso. Tests: MedSyntheticTest (5000/5000),
+  TruncatedDownloadTest (truncada y basura fallan sin guardar). Verificado en TV:
+  VisCard2 con "M3U · 5000 canales".
 - LECCIÓN 10/10 (bug propio, 4 falsos 401 antes de verlo): en `adb shell`,
   las comillas DOBLES las consume la laptop y la URL llega pelada al shell
   del dispositivo, que la corta en el primer `&` (llega sin password → 401

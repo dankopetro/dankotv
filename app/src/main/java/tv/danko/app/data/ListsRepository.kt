@@ -33,7 +33,10 @@ class ListsRepository(
 
     /** Fase 1 (10/10): baja el cuerpo a un archivo temporal a velocidad de red,
      *  SIN tocar la base. Leer "a tirones" con inserts interleaved hacía que el
-     *  proveedor cortara la conexión a mitad de la descarga (75 MB de una). */
+     *  proveedor cortara la conexión a mitad de la descarga (75 MB de una).
+     *  Además valida lo bajado: una transferencia truncada en silencio (sin
+     *  error de socket) importaría una lista mocha como si estuviera bien
+     *  (VisCard 10/10: 5000 canales → 1). */
     private fun downloadToTemp(url: String): java.io.File {
         val dir = tmpDir ?: java.io.File(System.getProperty("java.io.tmpdir") ?: "/tmp")
         if (!dir.isDirectory) dir.mkdirs()
@@ -43,8 +46,17 @@ class ListsRepository(
         try {
             http.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) throw java.io.IOException("HTTP ${resp.code}")
+                val expected = resp.header("Content-Length")?.toLongOrNull()
                 resp.body!!.byteStream().use { input ->
                     tmp.outputStream().use { out -> input.copyTo(out) }
+                }
+                if (expected != null && tmp.length() != expected) {
+                    throw java.io.IOException(
+                        "descarga truncada (${tmp.length()}/$expected bytes)",
+                    )
+                }
+                if (!tmpHasM3uHeader(tmp)) {
+                    throw java.io.IOException("descarga inválida (sin cabecera M3U)")
                 }
             }
         } catch (e: Exception) {
@@ -55,6 +67,19 @@ class ListsRepository(
             throw e
         }
         return tmp
+    }
+
+    /** Lee solo los primeros KB: tiene que aparecer #EXTM3U. */
+    private fun tmpHasM3uHeader(tmp: java.io.File): Boolean {
+        return try {
+            tmp.inputStream().bufferedReader().use { r ->
+                val buf = CharArray(8192)
+                val n = r.read(buf, 0, buf.size)
+                n > 0 && String(buf, 0, n).contains("#EXTM3U", ignoreCase = true)
+            }
+        } catch (_: Exception) {
+            false
+        }
     }
 
     /** Reintenta solo cortes de red (abort/timeout/reset). Los HTTP 4xx/5xx
