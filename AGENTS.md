@@ -777,6 +777,27 @@ ordena a presentación y el encoder genera PTS limpios. Por eso anda.
   Así entró PRINCIPAL (269.188 canales) en la TV.
 - Alias `~/.zshrc`: `listatv "Nombre" "URL"` (TV .10) / `listacelu` (celu).
   OJO zsh escapa `?&= ` al pegar URLs: borrar las `\` o la URL llega rota.
+- LECCIÓN 10/10 (bug propio, 4 falsos 401 antes de verlo): en `adb shell`,
+  las comillas DOBLES las consume la laptop y la URL llega pelada al shell
+  del dispositivo, que la corta en el primer `&` (llega sin password → 401
+  instantáneo). Los extras SIEMPRE entre comillas SIMPLES dentro de un único
+  string doble, como `send-list.sh:130`. URLs LAN sin `&` andaban y tapaban el bug.
+- Visibilidad intent (10/10 tarde, verificado en TV): Toast al recibir el intent
+  (onCreate/onNewIntent) + Toast al terminar + tarjeta grande "⏳ Cargando 'X'…"
+  (loadingBig, solo vía intent) + logs `DankoTV` (recibido/iniciada/ok) para
+  diagnóstico remoto. El indicador finito anterior se perdía desde el sillón.
+- singleTop en MainActivity (10/10): sin eso, `am start` apilaba instancias y el
+  intent moría en una instancia de fondo sin componer (VisCard: cero marcas en
+  logcat). Con singleTop todo cae en la instancia viva vía onNewIntent.
+  Verificado: intent en caliente funciona (VisTest2/VisCard por logcat ok=true).
+- uiautomator en la TV es poco fiable: dump solo trae nodos en viewport
+  (LazyColumn) y el bridge devuelve "null root node" si la pantalla durmió.
+  No usar dumps como única prueba: logcat + ojo del usuario mandan.
+- LECCIÓN 10/10 (bug propio, 4 falsos 401 antes de verlo): en `adb shell`,
+  las comillas DOBLES las consume la laptop y la URL llega pelada al shell
+  del dispositivo, que la corta en el primer `&` (llega sin password → 401
+  instantáneo). Los extras SIEMPRE entre comillas SIMPLES dentro de un único
+  string doble, como `send-list.sh:130`. URLs LAN sin `&` andaban y tapaban el bug.
 - 58 tests JVM verdes (incl. `recargaNo200ConservaCanales`, `mensajesRecarga`).
 ---
 

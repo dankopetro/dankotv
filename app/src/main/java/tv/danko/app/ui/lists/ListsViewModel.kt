@@ -15,6 +15,8 @@ data class ListsUiState(
     val lists: List<ListEntity> = emptyList(),
     val loading: Boolean = false,
     val loadingName: String = "",
+    /** True si el alta vino por intent adb (tarjeta grande, ver 9.21). */
+    val loadingBig: Boolean = false,
     val error: String? = null,
     /** True tras el primer refresh real a DB (evita auto-diálogo prematuro). */
     val loaded: Boolean = false,
@@ -41,9 +43,10 @@ class ListsViewModel(private val repo: ListsRepository) : ViewModel() {
     }
 
     /** Descarga + guarda (equivale a load_and_store). onDone(true) = abrir.
-     *  Si falla, se avisa y se conserva lo guardado (regla 10/10). */
-    fun addSpec(spec: PlaylistSpec, onDone: (Boolean) -> Unit) {
-        _ui.value = _ui.value.copy(loading = true, loadingName = spec.name, error = null)
+     *  Si falla, se avisa y se conserva lo guardado (regla 10/10).
+     *  viaIntent=true: alta por intent adb → tarjeta de progreso grande. */
+    fun addSpec(spec: PlaylistSpec, viaIntent: Boolean = false, onDone: (Boolean) -> Unit) {
+        _ui.value = _ui.value.copy(loading = true, loadingName = spec.name, loadingBig = viaIntent, error = null)
         viewModelScope.launch {
             val r = repo.loadSpec(spec)
             val listsNow = repo.lists()
@@ -51,6 +54,7 @@ class ListsViewModel(private val repo: ListsRepository) : ViewModel() {
             _ui.value = _ui.value.copy(
                 loading = false,
                 loadingName = "",
+                loadingBig = false,
                 lists = listsNow,
                 error = r.exceptionOrNull()?.let { loadErrorMessage(it, had) },
             )

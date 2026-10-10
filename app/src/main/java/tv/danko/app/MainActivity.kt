@@ -49,10 +49,17 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // backdoor add_list también con la app cerrada (onCreate)
         intent.getStringExtra("add_list_url")?.let { url ->
-            addListRequest.value = AddListRequest(
-                name = intent.getStringExtra("add_list_name") ?: "Lista",
-                url = url,
-            )
+            val name = intent.getStringExtra("add_list_name") ?: "Lista"
+            addListRequest.value = AddListRequest(name = name, url = url)
+            // 9.21: feedback instantáneo (el alta tarda minutos en listas grandes).
+            android.util.Log.i("DankoTV", "intent add_list recibido: '$name'")
+            try {
+                android.widget.Toast.makeText(
+                    this, "Recibido: cargando '$name'…",
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
+            } catch (_: Exception) {
+            }
         }
         setContent {
             val skin by container.settings.skin.collectAsStateWithLifecycle(initialValue = DEFAULT_SKIN)
@@ -84,10 +91,17 @@ class MainActivity : ComponentActivity() {
         // teclear (en la TV el IME por adb no se activa; el usuario final
         // usa el control remoto con su teclado en pantalla real).
         addListRequest.value = intent.getStringExtra("add_list_url")?.let { url ->
-            AddListRequest(
-                name = intent.getStringExtra("add_list_name") ?: "Lista",
-                url = url,
-            )
+            val name = intent.getStringExtra("add_list_name") ?: "Lista"
+            // 9.21: feedback instantáneo.
+            android.util.Log.i("DankoTV", "intent add_list recibido (app abierta): '$name'")
+            try {
+                android.widget.Toast.makeText(
+                    this, "Recibido: cargando '$name'…",
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
+            } catch (_: Exception) {
+            }
+            AddListRequest(name = name, url = url)
         }
     }
 
@@ -171,11 +185,26 @@ fun DankoNav(
             val skin by container.settings.skin.collectAsStateWithLifecycle(initialValue = DEFAULT_SKIN)
             // Dev backdoor: si llegó add_list por intent, dispara el alta acá
             // (dentro del scope composable correcto) y limpia el request.
+            // 9.21: Toast al terminar + log para diagnóstico remoto por adb.
             val addReq by MainActivity.addListRequest
             androidx.compose.runtime.LaunchedEffect(addReq) {
                 addReq?.let { r ->
-                    vm.addSpec(PlaylistSpec.M3u(r.name, r.url)) {
+                    android.util.Log.i("DankoTV", "intent add_list: alta '${r.name}' iniciada")
+                    vm.addSpec(PlaylistSpec.M3u(r.name, r.url), viaIntent = true) { ok ->
                         MainActivity.addListRequest.value = null
+                        android.util.Log.i("DankoTV", "intent add_list: '${r.name}' ok=$ok")
+                        try {
+                            android.widget.Toast.makeText(
+                                ctx,
+                                if (ok) {
+                                    "'${r.name}' lista ✓"
+                                } else {
+                                    vm.ui.value.error ?: "No se pudo cargar '${r.name}'."
+                                },
+                                android.widget.Toast.LENGTH_LONG,
+                            ).show()
+                        } catch (_: Exception) {
+                        }
                     }
                 }
             }

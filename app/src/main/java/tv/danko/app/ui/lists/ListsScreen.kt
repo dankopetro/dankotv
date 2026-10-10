@@ -75,7 +75,23 @@ fun ListsScreen(
             }
             tv.danko.app.ui.SkinMenuButton(current = skin, onSelect = onSkin)
         }
-        if (ui.loading) {
+        if (ui.loading && ui.loadingBig) {
+            // Alta por intent adb (9.21): tarjeta grande imposible de no ver
+            // desde el sillón + aclara que en listas grandes tarda minutos.
+            Card(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(
+                        "⏳ Cargando '${ui.loadingName}'…",
+                        fontWeight = FontWeight.Bold, fontSize = 18.sp,
+                    )
+                    Text(
+                        "Descargando e importando canales. En listas grandes tarda varios minutos: no apagues ni toques nada.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp,
+                    )
+                    LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
+                }
+            }
+        } else if (ui.loading) {
             LinearProgressIndicator(Modifier.fillMaxWidth().padding(bottom = 8.dp))
             Text("Descargando '${ui.loadingName}'…", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
