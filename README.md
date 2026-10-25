@@ -5,7 +5,7 @@ programación, películas y series, grabación y Cast. Un solo APK para ambos.
 
 ## Instalar
 
-1. Descargá el APK desde [Releases](../../releases) (`dankotv-1.0.1.apk`).
+1. Descargá el APK desde [Releases](../../releases) (`dankotv-1.0.2.apk`).
 2. En el dispositivo, permití *orígenes desconocidos* e instalalo.
 3. Requiere Android 8.0+.
 
