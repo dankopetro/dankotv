@@ -94,11 +94,14 @@ fun PlayerScreen(
     val activity = ctx as? Activity
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val player = remember { SeamlessPlayer(ctx.applicationContext) }
+    val wakeLock = remember { WakeLockHelper.get(ctx) }
     DisposableEffect(url) {
         player.play(url, isLive, userAgent)
+        wakeLock.acquire()
         onDispose {
             player.stop()
             player.destroy()
+            wakeLock.release()
         }
     }
 
