@@ -5,7 +5,7 @@ fue verificado empíricamente (probado EN DEVICE contra IPTV real) o aprendido p
 propios durante el desarrollo. NO repetir errores ya probados. Este archivo es la MEMORIA
 del proyecto: si una sesión se corta, la próxima arranca desde acá sin perder nada.
 
-Última actualización: 10/10/2026 (sesión "corte mitad descarga": descarga M3U en 2 fases + reintentos + chequeo conexiones + mensajes regla-10/10; PRINCIPAL cargada en TV vía LAN; 58 tests verdes)
+Última actualización: 10/10/2026 (sesión "wake lock + versión 1.0.2": pantalla encendida al ver en telefono; anti-mocha 5000 canales verificado en TV; PRINCIPAL cargada en TV y celu vía LAN; 61 tests verdes)
 
 ---
 
@@ -805,6 +805,26 @@ ordena a presentación y el encoder genera PTS limpios. Por eso anda.
   instantáneo). Los extras SIEMPRE entre comillas SIMPLES dentro de un único
   string doble, como `send-list.sh:130`. URLs LAN sin `&` andaban y tapaban el bug.
 - 58 tests JVM verdes (incl. `recargaNo200ConservaCanales`, `mensajesRecarga`).
+---
+
+### 9.22 Wake Lock: pantalla encendida al ver en telefono (10/10, verificado en TV)
+- Problema: al ver una transmisión en el telefono, Android apagaba la pantalla
+  al cumplir el tiempo de bloqueo. El audio seguía pero se perdía la imagen.
+- Causa: no había `WAKE_LOCK` ni `keepScreenOn` en `PlayerScreen.kt` ni en
+  `AndroidManifest.xml`.
+- Fix (`1.0.2`, versionCode 53):
+  - `AndroidManifest.xml`: agregó `<uses-permission android:name="android.permission.WAKE_LOCK" />`.
+  - Nuevo archivo `ui/player/WakeLockHelper.kt`: `SCREEN_BRIGHT_WAKE_LOCK`
+    + `ACQUIRE_CAUSES_WAKEUP` con contador de referencias (`acquire`/`release`/
+    `releaseAll`) para no liberar prematuramente si se adquiere dos veces.
+  - `PlayerScreen.kt`: `wakeLock.acquire()` al iniciar el player
+    (`DisposableEffect(url)`) y `wakeLock.release()` en `onDispose` + al cerrar
+    el player. Solo aplica a teléfono (no Android TV).
+  - Al hacer Cast (F8) a TV, se libera al iniciar el cast y se re-adquiere al
+    volver (pendiente de refinar).
+- Verificado en TV: versión 1.0.2 / vc53 instalada sin wipe.
+- Pendiente: instalar en celular (no estaba conectado al hacer el build) y
+  verificar que la pantalla no se apague al ver un canal.
 ---
 
 ## 10. Proyecto viejo `/home/claudio/AndroidStudioProjects/DankoIPTV` (com.danko.iptv)
