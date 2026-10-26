@@ -162,18 +162,17 @@ class SeamlessPlayer(
         } catch (_: Exception) {
             false
         }
-        if (isTv) {
+        // Chipset-aware: Exynos (Samsung) da video negro con vo=gpu (EGL/GLES del
+        // driver Mali). mediacodec_embed evita la GPU (overlay directo), igual que
+        // la TV. Otros SoC (Snapdragon, MediaTek, ...) usan vo=gpu (mejor
+        // rendimiento + subs mpv).
+        val isExynos = isExynosDevice()
+        if (isTv || isExynos) {
             mpv.setOptionString("vo", "mediacodec_embed")
             mpv.setOptionString("hwdec", "mediacodec")
         } else {
-            // Exynos/Samsung (A31 y similares) dan video negro con vo=gpu: el driver
-            // Mali/GLES no renderiza el VO de mpv (audio sí). hwdec=no tampoco lo
-            // arregló (1.0.3): el problema es el VO, no el decodero. Se usa
-            // mediacodec_embed (overlay directo del decoder al display, sin GPU),
-            // igual que la TV — único path que evita el driver. Costo: los subs de
-            // mpv no se renderizan (AUD y la UI Compose siguen andando).
-            mpv.setOptionString("vo", "mediacodec_embed")
-            mpv.setOptionString("hwdec", "mediacodec")
+            mpv.setOptionString("vo", "gpu")
+            mpv.setOptionString("hwdec", "auto")
         }
         mpv.setOptionString("ytdl", "no")
         mpv.setOptionString("title", "Danko TV")
@@ -220,6 +219,24 @@ class SeamlessPlayer(
             mpv.setOptionString("tls-cert-file", out.absolutePath)
         } catch (e: Exception) {
             Log.w(tag, "cacert install failed: $e")
+        }
+    }
+
+    /** Detecta SoC Exynos (Samsung): video negro con vo=gpu en esos chips. */
+    private fun isExynosDevice(): Boolean {
+        return try {
+            val soc = if (android.os.Build.VERSION.SDK_INT >= 31) {
+                android.os.Build.SOC_MODEL
+            } else {
+                ""
+            }
+            val hw = android.os.Build.HARDWARE.lowercase()
+            val board = android.os.Build.BOARD.lowercase()
+            soc.contains("exynos", ignoreCase = true) ||
+                hw.contains("exynos") ||
+                board.contains("exynos")
+        } catch (_: Exception) {
+            false
         }
     }
 
@@ -750,9 +767,15 @@ class SeamlessPlayer(
 
     /** Línea de diagnóstico en pantalla (para informe a distancia del tester). */
     fun diagLine(): String = try {
+        val soc = if (android.os.Build.VERSION.SDK_INT >= 31) {
+            android.os.Build.SOC_MODEL
+        } else {
+            android.os.Build.HARDWARE
+        }
         "vo=${strOpt("current-vo")} hwdec=${strOpt("hwdec-current")} " +
             "${strOpt("video-codec")} ${longOpt("dwidth")}x${longOpt("dheight")} " +
-            "vf=${dblOpt("estimated-vf-fps")} state=${_state.value::class.simpleName}"
+            "vf=${dblOpt("estimated-vf-fps")} state=${_state.value::class.simpleName} " +
+            "soc=$soc"
     } catch (_: Exception) {
         ""
     }

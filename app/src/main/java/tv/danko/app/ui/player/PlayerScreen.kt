@@ -704,6 +704,18 @@ fun PlayerScreen(
                             // HLS para vivo Xtream (.ts no lo reproduce el
                             // receptor — bug 21/09).
                             val castUrl = castStreamUrl(curUrl, isLive)
+                            // Diagnóstico para el tester a distancia: qué URL se le
+                            // manda a la TV. Si la TV no reproduce, esta URL es la
+                            // pista (ej. .ts sin convertir a .m3u8 en M3U puro).
+                            scope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                                try {
+                                    android.widget.Toast.makeText(
+                                        ctx, "Enviando a TV: ${castUrl.take(80)}",
+                                        android.widget.Toast.LENGTH_LONG,
+                                    ).show()
+                                } catch (_: Exception) {
+                                }
+                            }
                             val lower = castUrl.lowercase()
                             val mime = when {
                                 lower.contains(".m3u8") -> "application/x-mpegurl"
@@ -734,13 +746,24 @@ fun PlayerScreen(
                                 .setContentType(mime)
                                 .setMetadata(meta)
                                 .build()
-                            cast.remoteMediaClient?.load(info, true, 0)
-                            try {
-                                cast.remoteMediaClient?.let {
-                                    castRemote = it
-                                    it.registerCallback(castStatusCallback)
+                            val rmc = cast.remoteMediaClient
+                            if (rmc == null) {
+                                scope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                                    try {
+                                        android.widget.Toast.makeText(
+                                            ctx, "No se pudo enviar: sin cliente remoto",
+                                            android.widget.Toast.LENGTH_LONG,
+                                        ).show()
+                                    } catch (_: Exception) {
+                                    }
                                 }
-                            } catch (_: Exception) {
+                            } else {
+                                rmc.load(info, true, 0)
+                                try {
+                                    castRemote = rmc
+                                    rmc.registerCallback(castStatusCallback)
+                                } catch (_: Exception) {
+                                }
                             }
                         } catch (_: Exception) {
                         }
@@ -857,7 +880,7 @@ fun PlayerScreen(
             Column(Modifier.fillMaxSize()) {
                 Text(
                     (if (recording) "● REC ${fmtRec(recSecs)} · " else "") +
-                        "$curTitle  ·  $label  ·  v1.0.4",
+                        "$curTitle  ·  $label  ·  v1.0.5",
                     color = if (state is PlayerState.Playing && isLive) DankoOrange else DankoMuted,
                     fontSize = 13.sp,
                     // En landscape el título esquiva la cámara (cutout lateral).
@@ -871,7 +894,7 @@ fun PlayerScreen(
                         ),
                 )
                 // Diagnóstico en pantalla: el tester a distancia lo lee/transcribe
-                // sin adb. v1.0.4 = confirmación de que se instaló el build nuevo.
+                // sin adb. v1.0.5 = confirmación de que se instaló el build nuevo.
                 if (diag.isNotEmpty()) {
                     Text(
                         diag,
