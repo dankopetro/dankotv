@@ -120,6 +120,9 @@ fun PlayerScreen(
         mutableStateOf<List<androidx.mediarouter.media.MediaRouter.RouteInfo>>(emptyList())
     }
     var castActive by remember { mutableStateOf(false) }
+    // Diagnóstico del cast (para informe a distancia): URL enviada a la TV y
+    // si falló. Se muestra en pantalla, no solo en un toast.
+    var castDiag by remember { mutableStateOf("") }
     // Cliente remoto actual (para desregistrar el callback al soltar).
     var castRemote by remember {
         mutableStateOf<com.google.android.gms.cast.framework.media.RemoteMediaClient?>(null)
@@ -136,6 +139,7 @@ fun PlayerScreen(
                     ) {
                         android.util.Log.w("DankoTV", "cast: la TV no pudo reproducir")
                         scope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                            castDiag = "Error: TV no pudo reproducir"
                             try {
                                 android.widget.Toast.makeText(
                                     ctx, "La TV no pudo reproducir",
@@ -716,6 +720,9 @@ fun PlayerScreen(
                                 } catch (_: Exception) {
                                 }
                             }
+                            scope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                                castDiag = "Enviando a TV: ${castUrl.take(90)}"
+                            }
                             val lower = castUrl.lowercase()
                             val mime = when {
                                 lower.contains(".m3u8") -> "application/x-mpegurl"
@@ -781,6 +788,9 @@ fun PlayerScreen(
                             player.setPaused(false)
                             scope.launch { paused = false }
                             scope.launch { castActive = false }
+                            scope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                                castDiag = ""
+                            }
                         } catch (_: Exception) {
                         }
                     }
@@ -880,7 +890,7 @@ fun PlayerScreen(
             Column(Modifier.fillMaxSize()) {
                 Text(
                     (if (recording) "● REC ${fmtRec(recSecs)} · " else "") +
-                        "$curTitle  ·  $label  ·  v1.0.5",
+                        "$curTitle  ·  $label  ·  v1.0.6",
                     color = if (state is PlayerState.Playing && isLive) DankoOrange else DankoMuted,
                     fontSize = 13.sp,
                     // En landscape el título esquiva la cámara (cutout lateral).
@@ -894,10 +904,27 @@ fun PlayerScreen(
                         ),
                 )
                 // Diagnóstico en pantalla: el tester a distancia lo lee/transcribe
-                // sin adb. v1.0.5 = confirmación de que se instaló el build nuevo.
+                // sin adb. v1.0.6 = confirmación de que se instaló el build nuevo.
                 if (diag.isNotEmpty()) {
                     Text(
                         diag,
+                        color = DankoMuted,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                            .then(
+                                if (isLandscape) {
+                                    Modifier.windowInsetsPadding(WindowInsets.displayCutout)
+                                } else {
+                                    Modifier
+                                },
+                            ),
+                    )
+                }
+                // Diagnóstico del cast: URL enviada a la TV o error si falló.
+                // Solo en teléfono; el tester lo lee/transcribe sin adb.
+                if (!isTv && castDiag.isNotEmpty()) {
+                    Text(
+                        castDiag,
                         color = DankoMuted,
                         fontSize = 11.sp,
                         modifier = Modifier.padding(horizontal = 12.dp)

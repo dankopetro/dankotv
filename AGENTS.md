@@ -836,12 +836,16 @@ ordena a presentación y el encoder genera PTS limpios. Por eso anda.
 - 1.0.4 además muestra "v1.0.4" y una línea diag (vo/hwdec/codec/WxH/vf/state)
   en la pantalla del player, para confirmar instalación del build nuevo y
   obtener info del pipeline sin adb (el tester a distancia lo lee/transcribe).
-- 1.0.5: chipset-aware — Exynos (Samsung) → mediacodec_embed, otros SoC
-  (Snapdragon/Moto, MediaTek) → vo=gpu (subs + rendimiento). Cast: toast con la
-  URL enviada a la TV + aviso si no hay cliente remoto + castStatusCallback
-  cubre IDLE+ERROR. Reporte 1.0.4: el Galaxy ahora ve video, pero el cast a la
-  TV (cajita Fllow) no reproduce. Pendiente confirmar si es URL no convertida
-  (.ts en M3U puro) o descubrimiento mDNS.
+- 1.0.5 dejó MediaTek (MT6768V, Mali GPU) en vo=gpu: video negro aunque
+  mpv decodifica (vf>0, state=Playing). vo=gpu solo renderiza en Snapdragon.
+- 1.0.6: todos los teléfonos usan vo=mediacodec_embed + hwdec=mediacodec
+  (overlay directo, sin GPU) — igual que la TV y ya probado en el Galaxy A31.
+  Costo: los subs mpv no se renderizan en teléfonos, pero el video se ve en
+  cualquier SoC. Snapdragon (Moto) pierde subs pero gana consistencia.
+- 1.0.6 además muestra en pantalla el diagnóstico del cast: "Enviando a TV:
+  <url>" o "Error: TV no pudo reproducir", para que el tester a distancia
+  lo lea/transcriba y sepamos si falla la URL (.ts sin convertir) o el
+  descubrimiento mDNS de la cajita Fllow.
 ---
 
 ## 10. Proyecto viejo `/home/claudio/AndroidStudioProjects/DankoIPTV` (com.danko.iptv)

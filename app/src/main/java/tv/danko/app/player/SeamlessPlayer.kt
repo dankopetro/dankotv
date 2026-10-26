@@ -162,17 +162,18 @@ class SeamlessPlayer(
         } catch (_: Exception) {
             false
         }
-        // Chipset-aware: Exynos (Samsung) da video negro con vo=gpu (EGL/GLES del
-        // driver Mali). mediacodec_embed evita la GPU (overlay directo), igual que
-        // la TV. Otros SoC (Snapdragon, MediaTek, ...) usan vo=gpu (mejor
-        // rendimiento + subs mpv).
+        // Chipset-aware: Exynos y MediaTek (Mali GPU) dan video negro con vo=gpu.
+        // Snapdragon (Adreno) sí anda con vo=gpu, pero mediacodec_embed es seguro
+        // en todos los teléfonos (overlay directo del decoder, sin GPU) y es lo
+        // que ya funcionó en el Galaxy A31. Preferimos que se vea el video antes
+        // que conservar los subs mpv en teléfonos.
         val isExynos = isExynosDevice()
         if (isTv || isExynos) {
             mpv.setOptionString("vo", "mediacodec_embed")
             mpv.setOptionString("hwdec", "mediacodec")
         } else {
-            mpv.setOptionString("vo", "gpu")
-            mpv.setOptionString("hwdec", "auto")
+            mpv.setOptionString("vo", "mediacodec_embed")
+            mpv.setOptionString("hwdec", "mediacodec")
         }
         mpv.setOptionString("ytdl", "no")
         mpv.setOptionString("title", "Danko TV")
@@ -222,7 +223,7 @@ class SeamlessPlayer(
         }
     }
 
-    /** Detecta SoC Exynos (Samsung): video negro con vo=gpu en esos chips. */
+    /** Detecta SoC Exynos (Samsung). Se usa para diagnóstico en pantalla. */
     private fun isExynosDevice(): Boolean {
         return try {
             val soc = if (android.os.Build.VERSION.SDK_INT >= 31) {
