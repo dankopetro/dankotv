@@ -237,6 +237,15 @@ fun PlayerScreen(
         }
     }
     var volume by remember { mutableStateOf(100f) }
+    // Diagnóstico en pantalla (para informe a distancia del tester sin adb).
+    var diag by remember { mutableStateOf("") }
+    LaunchedEffect(state) {
+        while (state is PlayerState.Playing) {
+            diag = player.diagLine()
+            kotlinx.coroutines.delay(2000)
+        }
+        diag = ""
+    }
     var fullscreen by remember { mutableStateOf(false) }
     var fav by remember { mutableStateOf(false) }
     // EPG ahora/siguiente (F5): se carga por canal, con caché Room 6h.
@@ -848,7 +857,7 @@ fun PlayerScreen(
             Column(Modifier.fillMaxSize()) {
                 Text(
                     (if (recording) "● REC ${fmtRec(recSecs)} · " else "") +
-                        "$curTitle  ·  $label",
+                        "$curTitle  ·  $label  ·  v1.0.4",
                     color = if (state is PlayerState.Playing && isLive) DankoOrange else DankoMuted,
                     fontSize = 13.sp,
                     // En landscape el título esquiva la cámara (cutout lateral).
@@ -861,6 +870,23 @@ fun PlayerScreen(
                             },
                         ),
                 )
+                // Diagnóstico en pantalla: el tester a distancia lo lee/transcribe
+                // sin adb. v1.0.4 = confirmación de que se instaló el build nuevo.
+                if (diag.isNotEmpty()) {
+                    Text(
+                        diag,
+                        color = DankoMuted,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                            .then(
+                                if (isLandscape) {
+                                    Modifier.windowInsetsPadding(WindowInsets.displayCutout)
+                                } else {
+                                    Modifier
+                                },
+                            ),
+                    )
+                }
                 Box(Modifier.weight(1f).fillMaxWidth())
                 // EPG ahora/siguiente (TV y teléfono): solo si hay datos.
                 if (epgNow != null || epgNext != null) {

@@ -824,6 +824,18 @@ ordena a presentación y el encoder genera PTS limpios. Por eso anda.
     volver (pendiente de refinar).
 - Verificado en TV: versión 1.0.2 / vc53 instalada sin wipe.
 - Verificado en celular y TV (1.0.2/vc53): la pantalla no se apaga al ver un canal.
+
+### 9.23 A31 (Exynos/Samsung): video negro — diagnóstico a distancia (25/10)
+- Síntoma: Galaxy A31 (Exynos 850, Android 12), audio sí, video negro en live,
+  series y VOD; cast a TV OK; Moto Edge Neo OK.
+- 1.0.3 probó hwdec=no en teléfonos: NO lo arregló → el problema es el VO
+  (gpu/EGL del driver Mali), no el decodero.
+- 1.0.4 cambia teléfonos a vo=mediacodec_embed + hwdec=mediacodec (overlay
+  directo, sin GPU), igual que la TV. Costo: subs mpv no se renderizan (AUD y
+  UI Compose siguen andando).
+- 1.0.4 además muestra "v1.0.4" y una línea diag (vo/hwdec/codec/WxH/vf/state)
+  en la pantalla del player, para confirmar instalación del build nuevo y
+  obtener info del pipeline sin adb (el tester a distancia lo lee/transcribe).
 ---
 
 ## 10. Proyecto viejo `/home/claudio/AndroidStudioProjects/DankoIPTV` (com.danko.iptv)

@@ -166,11 +166,14 @@ class SeamlessPlayer(
             mpv.setOptionString("vo", "mediacodec_embed")
             mpv.setOptionString("hwdec", "mediacodec")
         } else {
-            mpv.setOptionString("vo", "gpu")
-            // hwdec=no (software) en teléfonos: mediacodec auto falla en Exynos/Samsung
-            // (A31 y similares: audio sí, video negro en live, series y VOD). Software
-            // decode anda en cualquier SoC; el costo es más CPU, pero mejor que negro.
-            mpv.setOptionString("hwdec", "no")
+            // Exynos/Samsung (A31 y similares) dan video negro con vo=gpu: el driver
+            // Mali/GLES no renderiza el VO de mpv (audio sí). hwdec=no tampoco lo
+            // arregló (1.0.3): el problema es el VO, no el decodero. Se usa
+            // mediacodec_embed (overlay directo del decoder al display, sin GPU),
+            // igual que la TV — único path que evita el driver. Costo: los subs de
+            // mpv no se renderizan (AUD y la UI Compose siguen andando).
+            mpv.setOptionString("vo", "mediacodec_embed")
+            mpv.setOptionString("hwdec", "mediacodec")
         }
         mpv.setOptionString("ytdl", "no")
         mpv.setOptionString("title", "Danko TV")
@@ -743,6 +746,15 @@ class SeamlessPlayer(
         } catch (e: Exception) {
             Log.w(tag, "STATS failed: $e")
         }
+    }
+
+    /** Línea de diagnóstico en pantalla (para informe a distancia del tester). */
+    fun diagLine(): String = try {
+        "vo=${strOpt("current-vo")} hwdec=${strOpt("hwdec-current")} " +
+            "${strOpt("video-codec")} ${longOpt("dwidth")}x${longOpt("dheight")} " +
+            "vf=${dblOpt("estimated-vf-fps")} state=${_state.value::class.simpleName}"
+    } catch (_: Exception) {
+        ""
     }
 
     private var ticking = false
