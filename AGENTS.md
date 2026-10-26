@@ -823,8 +823,7 @@ ordena a presentación y el encoder genera PTS limpios. Por eso anda.
   - Al hacer Cast (F8) a TV, se libera al iniciar el cast y se re-adquiere al
     volver (pendiente de refinar).
 - Verificado en TV: versión 1.0.2 / vc53 instalada sin wipe.
-- Pendiente: instalar en celular (no estaba conectado al hacer el build) y
-  verificar que la pantalla no se apague al ver un canal.
+- Verificado en celular y TV (1.0.2/vc53): la pantalla no se apaga al ver un canal.
 ---
 
 ## 10. Proyecto viejo `/home/claudio/AndroidStudioProjects/DankoIPTV` (com.danko.iptv)

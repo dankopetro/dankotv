@@ -167,7 +167,10 @@ class SeamlessPlayer(
             mpv.setOptionString("hwdec", "mediacodec")
         } else {
             mpv.setOptionString("vo", "gpu")
-            mpv.setOptionString("hwdec", "auto")
+            // hwdec=no (software) en teléfonos: mediacodec auto falla en Exynos/Samsung
+            // (A31 y similares: audio sí, video negro en live, series y VOD). Software
+            // decode anda en cualquier SoC; el costo es más CPU, pero mejor que negro.
+            mpv.setOptionString("hwdec", "no")
         }
         mpv.setOptionString("ytdl", "no")
         mpv.setOptionString("title", "Danko TV")
